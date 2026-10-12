@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fed-Heart-Disease baselines: pooled, local, FedAvg, SCAFFOLD</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper:#F3F6F8; --sheet:#FFFFFF; --ink:#16243A; --muted:#566579; --rule:#D3DCE5;
+  --accent:#0B7A75; --accent-soft:#E0F1EF; --caution:#8A5A0B; --caution-soft:#FBF1DE;
+  --code:#EAF0F4;
+  --sans:"IBM Plex Sans", "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper:#0E151D; --sheet:#141E29; --ink:#DCE5EE; --muted:#93A3B5; --rule:#283646;
+    --accent:#44C2B8; --accent-soft:#12302F; --caution:#E3B35E; --caution-soft:#2C2413; --code:#101922;
+  }
+}
+:root[data-theme="dark"] {
+  --paper:#0E151D; --sheet:#141E29; --ink:#DCE5EE; --muted:#93A3B5; --rule:#283646;
+  --accent:#44C2B8; --accent-soft:#12302F; --caution:#E3B35E; --caution-soft:#2C2413; --code:#101922;
+}
+*, *::before, *::after { box-sizing:inherit; }
+html { scroll-padding-top:calc(env(safe-area-inset-top,0px) + 16px); scroll-behavior:smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior:auto; } }
+body { margin:0; background:var(--paper); color:var(--ink); font:16px/1.6 var(--sans); }
+a { color:var(--accent); }
+code { font-family:var(--mono); font-size:.88em; background:var(--code); padding:.08em .32em; border-radius:4px; }
+.wrap { display:grid; grid-template-columns:260px minmax(0,1fr); gap:40px; max-width:1180px; margin:0 auto; padding:32px 24px 80px; }
+nav.side { position:sticky; top:calc(env(safe-area-inset-top,0px) + 24px); align-self:start; }
+nav.side h1 { font-size:1rem; font-weight:600; margin:0 0 4px; line-height:1.35; }
+nav.side .meter { height:6px; background:var(--rule); border-radius:3px; margin:14px 0 6px; overflow:hidden; }
+nav.side .meter span { display:block; height:100%; width:0; background:var(--accent); transition:width .25s; }
+nav.side .count { font-size:.85rem; color:var(--muted); }
+nav.side ol { list-style:none; margin:18px 0 0; padding:0; }
+nav.side li label { display:flex; align-items:flex-start; gap:8px; padding:5px 0; font-size:.92rem; }
+nav.side li a { color:var(--ink); text-decoration:none; }
+nav.side li a:hover { color:var(--accent); }
+nav.side li input:checked + a { color:var(--muted); text-decoration:line-through; }
+nav.side .refs { margin-top:18px; padding-top:14px; border-top:1px solid var(--rule); font-size:.9rem; display:grid; gap:4px; }
+nav.side .reset { margin-top:16px; background:none; border:1px solid var(--rule); color:var(--muted); font:inherit; font-size:.85rem; padding:4px 10px; border-radius:6px; cursor:pointer; }
+main { max-width:780px; }
+header.hero h1 { font-size:clamp(1.7rem, 3.4vw, 2.4rem); line-height:1.15; font-weight:600; letter-spacing:-.01em; margin:0 0 12px; }
+header.hero p { color:var(--muted); max-width:62ch; margin:0 0 20px; font-size:1.05rem; }
+.pipe { width:100%; height:auto; background:var(--sheet); border:1px solid var(--rule); border-radius:10px; padding:10px; margin:6px 0 34px; }
+.pipe text { font:600 13px var(--sans); fill:var(--ink); text-anchor:middle; }
+.pipe text.sub { font:400 10.5px var(--sans); fill:var(--muted); }
+.pipe .run rect, .pipe .file rect { fill:var(--paper); stroke:var(--rule); }
+.pipe .hub rect { fill:var(--accent-soft); stroke:var(--accent); stroke-width:1.5; }
+.pipe .hub text:first-of-type { font-family:var(--mono); font-size:14px; fill:var(--accent); }
+.pipe .lines path { fill:none; stroke:var(--accent); stroke-width:1.4; opacity:.7; }
+.pipe-wrap { overflow-x:auto; }
+.pipe-wrap .pipe { min-width:600px; }
+section.step { background:var(--sheet); border:1px solid var(--rule); border-radius:10px; padding:22px 26px 10px; margin-bottom:22px; }
+.step-head { display:flex; align-items:center; gap:14px; margin-bottom:8px; }
+.step-head .num { flex:none; width:34px; height:34px; border-radius:50%; background:var(--accent); color:var(--sheet); display:grid; place-items:center; font-weight:600; }
+.step-head h2 { font-size:1.3rem; margin:0; flex:1; line-height:1.25; }
+.step-head .done { font-size:.85rem; color:var(--muted); display:flex; gap:6px; align-items:center; white-space:nowrap; }
+section.step.is-done { border-color:var(--accent); }
+section.step.is-done .num { background:var(--muted); }
+h3 { font-size:1.02rem; margin:22px 0 6px; }
+p, li, dd { max-width:70ch; }
+ul { padding-left:1.2em; }
+:is(p, li, td, dd) code { overflow-wrap:anywhere; }
+.note { background:var(--caution-soft); border-left:3px solid var(--caution); padding:10px 14px; border-radius:0 6px 6px 0; font-size:.95rem; }
+.code { border:1px solid var(--rule); border-radius:8px; margin:12px 0 16px; overflow:hidden; background:var(--code); }
+.code-head { display:flex; justify-content:space-between; align-items:center; padding:6px 10px 6px 14px; border-bottom:1px solid var(--rule); font-size:.82rem; color:var(--muted); font-family:var(--mono); }
+.copy { font:500 .8rem var(--sans); color:var(--accent); background:var(--sheet); border:1px solid var(--rule); border-radius:5px; padding:3px 10px; cursor:pointer; }
+.copy.ok { background:var(--accent); color:var(--sheet); border-color:var(--accent); }
+.code pre { margin:0; padding:14px; overflow-x:auto; max-height:560px; }
+.code pre code { background:none; padding:0; font-size:.83rem; line-height:1.55; }
+.tree { overflow-x:auto; }
+.tree pre { font-family:var(--mono); font-size:.84rem; background:var(--code); border:1px solid var(--rule); border-radius:8px; padding:14px; margin:12px 0; }
+details { margin:6px 0 16px; }
+summary { cursor:pointer; color:var(--accent); font-weight:500; }
+section.ref { margin-top:44px; padding-top:8px; border-top:2px solid var(--rule); }
+section.ref h2 { font-size:1.35rem; }
+table { border-collapse:collapse; width:100%; font-size:.93rem; display:block; overflow-x:auto; }
+th, td { text-align:left; vertical-align:top; padding:9px 12px; border-bottom:1px solid var(--rule); }
+th { font-weight:600; }
+dt { font-weight:600; margin-top:12px; }
+dd { margin:2px 0 0; color:var(--muted); }
+:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+input[type="checkbox"] { accent-color:var(--accent); width:16px; height:16px; flex:none; margin-top:4px; }
+@media (max-width: 880px) {
+  .wrap { grid-template-columns:minmax(0,1fr); gap:10px; padding:20px 16px 60px; }
+  nav.side { position:static; background:var(--sheet); border:1px solid var(--rule); border-radius:10px; padding:16px; }
+  section.step { padding:18px 16px 6px; }
+  .step-head { flex-wrap:wrap; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="side" aria-label="Steps">
+  <h1>Fed-Heart-Disease baselines</h1>
+  <div class="meter" aria-hidden="true"><span id="meter"></span></div>
+  <div class="count" id="count">0 of 12 steps done</div>
+  <ol><li><label><input type="checkbox" data-step="0"><a href="#s0">Check your setup</a></label></li>
+<li><label><input type="checkbox" data-step="1"><a href="#s1">Lay out the project</a></label></li>
+<li><label><input type="checkbox" data-step="2"><a href="#s2">Add the harness</a></label></li>
+<li><label><input type="checkbox" data-step="3"><a href="#s3">Run pooled and local-only baselines</a></label></li>
+<li><label><input type="checkbox" data-step="4"><a href="#s4">Configure pyproject.toml</a></label></li>
+<li><label><input type="checkbox" data-step="5"><a href="#s5">Replace client_app.py</a></label></li>
+<li><label><input type="checkbox" data-step="6"><a href="#s6">Replace server_app.py</a></label></li>
+<li><label><input type="checkbox" data-step="7"><a href="#s7">Smoke-test FedAvg</a></label></li>
+<li><label><input type="checkbox" data-step="8"><a href="#s8">Sanity-check SCAFFOLD</a></label></li>
+<li><label><input type="checkbox" data-step="9"><a href="#s9">Run everything, 5 seeds</a></label></li>
+<li><label><input type="checkbox" data-step="10"><a href="#s10">Read the results</a></label></li>
+<li><label><input type="checkbox" data-step="11"><a href="#s11">Show your work</a></label></li></ol>
+  <div class="refs"><a href="#ref-scaffold">How SCAFFOLD fits in</a><a href="#ref-trouble">Troubleshooting</a><a href="#ref-terms">Terms</a></div>
+  <button class="reset" type="button" id="reset">Clear checkmarks</button>
+</nav>
+<main>
+<header class="hero">
+  <h1>Pooled, local-only, FedAvg and SCAFFOLD on Fed-Heart-Disease</h1>
+  <p>A step-by-step build of four comparable baselines in your Flower app. Every run goes through one shared harness and lands in one results file, which becomes a table and two plots you can drop into your notebook.</p>
+  <div class="pipe-wrap"><svg class="pipe" viewBox="0 0 760 250" role="img" aria-label="Four runs share one harness, which writes results.csv, which summarize.py turns into a table and plots">
+<g class="run"><rect x="10" y="10" width="170" height="44" rx="6"/><text x="95" y="30">Local-only</text><text class="sub" x="95" y="45">floor · baselines.py</text></g>
+<g class="run"><rect x="10" y="68" width="170" height="44" rx="6"/><text x="95" y="88">Pooled</text><text class="sub" x="95" y="103">ceiling · baselines.py</text></g>
+<g class="run"><rect x="10" y="126" width="170" height="44" rx="6"/><text x="95" y="146">FedAvg</text><text class="sub" x="95" y="161">flwr run · method=fedavg</text></g>
+<g class="run"><rect x="10" y="184" width="170" height="44" rx="6"/><text x="95" y="204">SCAFFOLD</text><text class="sub" x="95" y="219">flwr run · method=scaffold</text></g>
+<g class="lines"><path d="M180 32 C 230 32, 230 119, 262 119"/><path d="M180 90 C 230 90, 230 119, 262 119"/><path d="M180 148 C 230 148, 230 119, 262 119"/><path d="M180 206 C 230 206, 230 119, 262 119"/>
+<path d="M438 119 L 486 119"/><path d="M620 119 C 634 119, 634 70, 648 70"/><path d="M620 119 C 634 119, 634 168, 648 168"/></g>
+<g class="hub"><rect x="262" y="64" width="176" height="110" rx="8"/><text x="350" y="94">harness.py</text>
+<text class="sub" x="350" y="116">same data splits</text><text class="sub" x="350" y="132">same model + SGD</text><text class="sub" x="350" y="148">same eval + logging</text></g>
+<g class="file"><rect x="486" y="97" width="134" height="44" rx="6"/><text x="553" y="117">results.csv</text><text class="sub" x="553" y="132">one row per hospital</text></g>
+<g class="file"><rect x="648" y="48" width="106" height="44" rx="6"/><text x="701" y="68">summary.md</text><text class="sub" x="701" y="83">table</text></g>
+<g class="file"><rect x="648" y="146" width="106" height="44" rx="6"/><text x="701" y="166">plots</text><text class="sub" x="701" y="181">.png</text></g>
+</svg></div>
+</header>
+<section class="step" id="s0">
+<div class="step-head"><span class="num">0</span><h2>Check your setup</h2><label class="done"><input type="checkbox" data-step="0"> Done</label></div>
+
+<p>Three things have to be true before any of the code below will run. Do these in the environment your Flower app lives in.</p>
+<h3>Your Flower version uses the Message API</h3>
+<p>Open <code>heart_fl/client_app.py</code>. If you see <code>@app.train()</code> and <code>Message</code>, the code in this guide fits your app. If you see <code>NumPyClient</code> or <code>client_fn</code>, you're on an older Flower. Either upgrade (<code>pip install -U flwr</code>) and re-run <code>flwr new</code>, or send me your files and I'll adapt the code.</p>
+<div class="code"><div class="code-head"><span>Terminal</span><button class="copy" type="button">Copy</button></div><pre><code>flwr --version</code></pre></div>
+<h3>FLamby is installed and finds the data</h3>
+<div class="code"><div class="code-head"><span>Terminal</span><button class="copy" type="button">Copy</button></div><pre><code>pip show flamby
+python -c &quot;from flamby.datasets.fed_heart_disease import FedHeartDisease; print(len(FedHeartDisease(center=0, train=True, pooled=False)))&quot;</code></pre></div>
+<p>The second command should print <strong>199</strong> (Cleveland's training set). If it fails, clone FLamby, run <code>pip install -e .[heart]</code>, then run its <code>download.py</code> in <code>flamby/datasets/fed_heart_disease/dataset_creation_scripts</code>.</p>
+<h3>The project is a git repo</h3>
+<p>Every result row records the commit it came from, so you can always reproduce a table. Commit before each batch of runs.</p>
+<div class="code"><div class="code-head"><span>Terminal</span><button class="copy" type="button">Copy</button></div><pre><code>git init          # only if it isn&#x27;t a repo yet
+git add . &amp;&amp; git commit -m &quot;baseline harness&quot;</code></pre></div>
+<p class="note">All code assumes your package folder is named <code>heart_fl</code>. If yours is different, find-and-replace <code>heart_fl</code> in every file.</p>
+
+</section>
+<section class="step" id="s1">
+<div class="step-head"><span class="num">1</span><h2>Lay out the project</h2><label class="done"><input type="checkbox" data-step="1"> Done</label></div>
+
+<p>Add these files next to what <code>flwr new</code> generated. <code>client_app.py</code> and <code>server_app.py</code> get replaced. <code>task.py</code> is no longer used, because <code>harness.py</code> takes over its job; you can delete it or leave it.</p>
+<div class="tree"><pre>heart_fl/                  ← your project folder (run every command from here)
+├── pyproject.toml          ← edit in step 4
+├── baselines.py            ← new: pooled + local-only
+├── summarize.py            ← new: table + plots
+├── run_all.sh              ← new: runs everything
+├── heart_fl/
+│   ├── harness.py          ← new: shared data, model, SGD, eval, logging
+│   ├── client_app.py       ← replace
+│   └── server_app.py       ← replace
+├── results/                ← created automatically
+└── scaffold_state/         ← created automatically (SCAFFOLD client memory)</pre></div>
+<p>Add <code>scaffold_state/</code> to <code>.gitignore</code>. Do commit <code>results/</code>.</p>
+
+</section>
+<section class="step" id="s2">
+<div class="step-head"><span class="num">2</span><h2>Add the harness</h2><label class="done"><input type="checkbox" data-step="2"> Done</label></div>
+
+<p>This file is the referee. Every method gets its data, model, optimizer, evaluation, and logging from here, so no method gets an unfair advantage. It has four jobs:</p>
+<ul>
+<li><strong>Data:</strong> each hospital's training loader, the pooled training loader, and every hospital's own test set.</li>
+<li><strong>Training:</strong> <code>train_sgd</code> for pooled, local, and FedAvg; <code>train_scaffold</code> for SCAFFOLD, which adds <code>c − c_i</code> to each gradient.</li>
+<li><strong>SCAFFOLD plumbing:</strong> packing the control variate next to the model weights, and saving each hospital's <code>c_i</code> between rounds.</li>
+<li><strong>Logging:</strong> one CSV row per hospital per evaluation, with the method, seed, round, bytes uploaded, and git commit.</li>
+</ul>
+<div class="code"><div class="code-head"><span>heart_fl/harness.py</span><button class="copy" type="button">Copy</button></div><pre><code>&quot;&quot;&quot;Shared experiment harness for Fed-Heart-Disease.
+
+Every method (pooled, local, FedAvg, SCAFFOLD) uses the SAME data splits,
+model, optimizer, evaluation, and logging from this file, so the
+comparisons are fair.
+&quot;&quot;&quot;
+import csv
+import subprocess
+import time
+from collections import OrderedDict
+from functools import lru_cache
+from pathlib import Path
+
+import numpy as np
+import torch
+from torch.utils.data import DataLoader
+from flamby.datasets.fed_heart_disease import (
+    BATCH_SIZE,
+    NUM_CLIENTS,
+    Baseline,
+    BaselineLoss,
+    FedHeartDisease,
+    metric,
+)
+
+ROOT = Path(__file__).resolve().parents[1]          # the project folder
+RESULTS_PATH = ROOT / &quot;results&quot; / &quot;results.csv&quot;
+STATE_DIR = ROOT / &quot;scaffold_state&quot;                 # SCAFFOLD client memory (c_i)
+CONTROL_PREFIX = &quot;c.&quot;                               # marks control-variate tensors
+FIELDS = [&quot;timestamp&quot;, &quot;commit&quot;, &quot;method&quot;, &quot;seed&quot;, &quot;round&quot;, &quot;client&quot;,
+          &quot;accuracy&quot;, &quot;bytes_uploaded&quot;, &quot;lr&quot;, &quot;local_epochs&quot;]
+
+
+# ---------------------------------------------------------------- setup
+def set_seed(seed: int):
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+
+
+def make_model():
+    return Baseline()  # FLamby&#x27;s reference model: identical for every method
+
+
+# ---------------------------------------------------------------- data
+def train_loader(center=None, pooled=False, seed=0):
+    if pooled:  # all 4 hospitals&#x27; training data concatenated
+        ds = FedHeartDisease(train=True, pooled=True)
+    else:
+        ds = FedHeartDisease(center=center, train=True, pooled=False)
+    g = torch.Generator().manual_seed(seed)
+    return DataLoader(ds, batch_size=BATCH_SIZE, shuffle=True, generator=g)
+
+
+@lru_cache(maxsize=1)
+def test_loaders():
+    &quot;&quot;&quot;Each hospital&#x27;s own test set, plus the pooled test set.&quot;&quot;&quot;
+    loaders = {
+        str(i): DataLoader(FedHeartDisease(center=i, train=False, pooled=False),
+                           batch_size=BATCH_SIZE)
+        for i in range(NUM_CLIENTS)
+    }
+    loaders[&quot;pooled&quot;] = DataLoader(FedHeartDisease(train=False, pooled=True),
+                                   batch_size=BATCH_SIZE)
+    return loaders
+
+
+# ---------------------------------------------------------------- training
+def train_sgd(model, loader, lr, epochs):
+    &quot;&quot;&quot;Plain SGD. Used by pooled, local, and FedAvg clients.&quot;&quot;&quot;
+    opt = torch.optim.SGD(model.parameters(), lr=lr)
+    loss_fn = BaselineLoss()
+    model.train()
+    for _ in range(epochs):
+        for xb, yb in loader:
+            opt.zero_grad()
+            loss_fn(model(xb), yb).backward()
+            opt.step()
+    return model
+
+
+def zeros_like_params(model):
+    return OrderedDict((n, torch.zeros_like(p)) for n, p in model.named_parameters())
+
+
+def train_scaffold(model, loader, lr, epochs, c, c_i, correction=True):
+    &quot;&quot;&quot;SCAFFOLD local training (Karimireddy et al., 2020, option II).
+
+    Each step uses  g - c_i + c  instead of  g.
+    Returns the trained model and the client&#x27;s refreshed control variate.
+    With correction=False the steps are identical to FedAvg (sanity check).
+    &quot;&quot;&quot;
+    x = {n: p.detach().clone() for n, p in model.named_parameters()}
+    opt = torch.optim.SGD(model.parameters(), lr=lr)
+    loss_fn = BaselineLoss()
+    model.train()
+    steps = 0
+    for _ in range(epochs):
+        for xb, yb in loader:
+            opt.zero_grad()
+            loss_fn(model(xb), yb).backward()
+            if correction:
+                for n, p in model.named_parameters():
+                    p.grad.add_(c[n] - c_i[n])        # g - c_i + c
+            opt.step()
+            steps += 1
+    y = {n: p.detach().clone() for n, p in model.named_parameters()}
+    c_i_new = OrderedDict(
+        (n, c_i[n] - c[n] + (x[n] - y[n]) / (steps * lr)) for n in x
+    )
+    return model, c_i_new
+
+
+# ---------------------------------------------------------------- SCAFFOLD packing
+def pack_arrays(model_state, control):
+    &quot;&quot;&quot;Model weights + control variate in one dict (control keys get &#x27;c.&#x27;).&quot;&quot;&quot;
+    out = OrderedDict(model_state)
+    out.update((CONTROL_PREFIX + k, v) for k, v in control.items())
+    return out
+
+
+def split_arrays(state):
+    &quot;&quot;&quot;Inverse of pack_arrays. Returns (model_state, control).&quot;&quot;&quot;
+    model_state = OrderedDict((k, v) for k, v in state.items()
+                              if not k.startswith(CONTROL_PREFIX))
+    control = OrderedDict((k[len(CONTROL_PREFIX):], v) for k, v in state.items()
+                          if k.startswith(CONTROL_PREFIX))
+    return model_state, control
+
+
+def load_client_control(run_id, pid, model):
+    path = STATE_DIR / f&quot;run{run_id}_client{pid}.pt&quot;
+    return torch.load(path) if path.exists() else zeros_like_params(model)
+
+
+def save_client_control(run_id, pid, c_i):
+    STATE_DIR.mkdir(exist_ok=True)
+    torch.save(c_i, STATE_DIR / f&quot;run{run_id}_client{pid}.pt&quot;)
+
+
+# ---------------------------------------------------------------- evaluation
+@torch.no_grad()
+def evaluate(model, loader):
+    model.eval()
+    ys, preds = [], []
+    for xb, yb in loader:
+        ys.append(yb)
+        preds.append(model(xb))
+    return float(metric(torch.cat(ys).numpy(), torch.cat(preds).numpy()))
+
+
+def evaluate_all(model):
+    &quot;&quot;&quot;Accuracy on every hospital&#x27;s test set and on the pooled test set.&quot;&quot;&quot;
+    return {name: evaluate(model, dl) for name, dl in test_loaders().items()}
+
+
+def array_bytes(state):
+    return sum(t.numel() * t.element_size() for t in state.values())
+
+
+# ---------------------------------------------------------------- logging
+def _git_commit():
+    try:
+        return subprocess.check_output(
+            [&quot;git&quot;, &quot;rev-parse&quot;, &quot;--short&quot;, &quot;HEAD&quot;], cwd=ROOT,
+            stderr=subprocess.DEVNULL).decode().strip()
+    except Exception:
+        return &quot;nogit&quot;
+
+
+def log(method, seed, accs, round_=-1, bytes_uploaded=0, lr=None, local_epochs=None):
+    &quot;&quot;&quot;Append one row per client to results/results.csv.&quot;&quot;&quot;
+    RESULTS_PATH.parent.mkdir(exist_ok=True)
+    new_file = not RESULTS_PATH.exists()
+    with open(RESULTS_PATH, &quot;a&quot;, newline=&quot;&quot;) as f:
+        w = csv.DictWriter(f, fieldnames=FIELDS)
+        if new_file:
+            w.writeheader()
+        for client, acc in accs.items():
+            w.writerow({
+                &quot;timestamp&quot;: time.strftime(&quot;%Y-%m-%d %H:%M:%S&quot;),
+                &quot;commit&quot;: _git_commit(), &quot;method&quot;: method, &quot;seed&quot;: seed,
+                &quot;round&quot;: round_, &quot;client&quot;: client, &quot;accuracy&quot;: round(acc, 4),
+                &quot;bytes_uploaded&quot;: bytes_uploaded, &quot;lr&quot;: lr,
+                &quot;local_epochs&quot;: local_epochs,
+            })</code></pre></div>
+
+</section>
+<section class="step" id="s3">
+<div class="step-head"><span class="num">3</span><h2>Run pooled and local-only baselines</h2><label class="done"><input type="checkbox" data-step="3"> Done</label></div>
+
+<p><strong>Pooled</strong> trains one model on all four hospitals' training data concatenated. That's the ceiling: what you'd get if hospitals could share everything. <strong>Local-only</strong> trains a separate model per hospital on its own data. That's the floor. Federated methods should land between them, hopefully near the ceiling.</p>
+<div class="code"><div class="code-head"><span>baselines.py</span><button class="copy" type="button">Copy</button></div><pre><code>&quot;&quot;&quot;Pooled (ceiling) and local-only (floor) baselines. No Flower needed.
+
+    python baselines.py --seeds 0 1 2 3 4 --lr 0.01 --epochs 50
+&quot;&quot;&quot;
+import argparse
+
+from heart_fl.harness import (NUM_CLIENTS, evaluate, evaluate_all, log, make_model,
+                              set_seed, test_loaders, train_loader, train_sgd)
+
+p = argparse.ArgumentParser()
+p.add_argument(&quot;--seeds&quot;, type=int, nargs=&quot;+&quot;, default=[0, 1, 2, 3, 4])
+p.add_argument(&quot;--lr&quot;, type=float, default=0.01)
+p.add_argument(&quot;--epochs&quot;, type=int, default=50)
+p.add_argument(&quot;--tag&quot;, default=&quot;&quot;, help=&quot;suffix for method names, e.g. _lr0.1 while tuning&quot;)
+args = p.parse_args()
+
+for seed in args.seeds:
+    # Pooled: one model trained on every hospital&#x27;s data, tested on each hospital
+    set_seed(seed)
+    model = train_sgd(make_model(), train_loader(pooled=True, seed=seed), args.lr, args.epochs)
+    accs = evaluate_all(model)
+    log(&quot;pooled&quot; + args.tag, seed, accs, lr=args.lr, local_epochs=args.epochs)
+    print(f&quot;seed {seed} pooled: &quot; + &quot;, &quot;.join(f&quot;{k}={v:.3f}&quot; for k, v in accs.items()))
+
+    # Local-only: each hospital trains alone, tested on its own test set
+    for i in range(NUM_CLIENTS):
+        set_seed(seed)
+        model = train_sgd(make_model(), train_loader(center=i, seed=seed), args.lr, args.epochs)
+        acc = evaluate(model, test_loaders()[str(i)])
+        log(&quot;local&quot; + args.tag, seed, {str(i): acc}, lr=args.lr, local_epochs=args.epochs)
+        print(f&quot;seed {seed} local client {i}: {acc:.3f}&quot;)</code></pre></div>
+<h3>Pick a learning rate first</h3>
+<p>Try three values on one seed. The <code>--tag</code> keeps them apart in the results file.</p>
+<div class="code"><div class="code-head"><span>Terminal</span><button class="copy" type="button">Copy</button></div><pre><code>python baselines.py --seeds 0 --lr 0.001 --tag _lr0.001
+python baselines.py --seeds 0 --lr 0.01  --tag _lr0.01
+python baselines.py --seeds 0 --lr 0.1   --tag _lr0.1
+python summarize.py</code></pre></div>
+<p>Pick the rate with the best pooled mean and use it for every method. Write the choice in your notebook. <code>run_all.sh</code> archives these tuning rows automatically, so they won't mix into the final table.</p>
+<p class="note">If every accuracy sits around the same value no matter what, the model is probably predicting one class for everything. Try a larger learning rate or more epochs.</p>
+
+</section>
+<section class="step" id="s4">
+<div class="step-head"><span class="num">4</span><h2>Configure pyproject.toml</h2><label class="done"><input type="checkbox" data-step="4"> Done</label></div>
+
+<p>Keep your existing <code>[project]</code> and <code>[tool.flwr.app.components]</code> sections. Replace the <code>[tool.flwr.app.config]</code> section and set the number of simulated nodes to 4.</p>
+<div class="code"><div class="code-head"><span>pyproject.toml (the parts to change)</span><button class="copy" type="button">Copy</button></div><pre><code>[tool.flwr.app.config]
+num-server-rounds = 50       # 50 rounds x 1 local epoch = 50 pooled epochs
+local-epochs = 1
+lr = 0.01                    # the value you picked in step 3
+seed = 0
+method = &quot;fedavg&quot;            # &quot;fedavg&quot; or &quot;scaffold&quot;
+scaffold-correction = true   # false only for the sanity check in step 8
+
+[tool.flwr.federations.local-simulation]
+options.num-supernodes = 4   # one simulated node per hospital</code></pre></div>
+<p>Any key here can be overridden per run without editing the file, for example <code>flwr run . --run-config "method='scaffold' seed=3"</code>. Strings need single quotes inside the double quotes.</p>
+<p class="note">If your <code>pyproject.toml</code> has no <code>[tool.flwr.federations]</code> section, your Flower version keeps simulation settings in a separate config file. Set 4 nodes there instead.</p>
+
+</section>
+<section class="step" id="s5">
+<div class="step-head"><span class="num">5</span><h2>Replace client_app.py</h2><label class="done"><input type="checkbox" data-step="5"> Done</label></div>
+
+<p>Each simulated node is one hospital (<code>partition-id</code> 0–3). Every round it receives the global model, trains on its own data, and sends weights back. For SCAFFOLD it also receives the server's <code>c</code>, loads its own <code>c_i</code> from disk, and sends back its refreshed <code>c_i</code> packed next to the weights.</p>
+<div class="code"><div class="code-head"><span>heart_fl/client_app.py</span><button class="copy" type="button">Copy</button></div><pre><code>&quot;&quot;&quot;Flower ClientApp for Fed-Heart-Disease. Runs FedAvg or SCAFFOLD (run config &#x27;method&#x27;).&quot;&quot;&quot;
+from collections import OrderedDict
+
+from flwr.app import ArrayRecord, Context, Message, MetricRecord, RecordDict
+from flwr.clientapp import ClientApp
+
+from heart_fl.harness import (evaluate, load_client_control, make_model, pack_arrays,
+                              save_client_control, set_seed, split_arrays,
+                              test_loaders, train_loader, train_scaffold, train_sgd)
+
+app = ClientApp()
+
+
+@app.train()
+def train(msg: Message, context: Context):
+    cfg = context.run_config
+    method = cfg[&quot;method&quot;]
+    lr, epochs, seed = float(cfg[&quot;lr&quot;]), int(cfg[&quot;local-epochs&quot;]), int(cfg[&quot;seed&quot;])
+    pid = int(context.node_config[&quot;partition-id&quot;])          # hospital 0..3
+    server_round = int(msg.content[&quot;config&quot;].get(&quot;server-round&quot;, 0))
+
+    shuffle_seed = seed * 1000 + server_round * 10 + pid
+    set_seed(shuffle_seed)
+    loader = train_loader(center=pid, seed=shuffle_seed)
+
+    # Global weights (and, for SCAFFOLD, the server control variate c)
+    model_state, c = split_arrays(msg.content[&quot;arrays&quot;].to_torch_state_dict())
+    model = make_model()
+    model.load_state_dict(model_state)
+
+    if method == &quot;fedavg&quot;:
+        train_sgd(model, loader, lr, epochs)
+        out = OrderedDict(model.state_dict())
+    elif method == &quot;scaffold&quot;:
+        c_i = load_client_control(context.run_id, pid, model)   # this hospital&#x27;s memory
+        _, c_i_new = train_scaffold(model, loader, lr, epochs, c, c_i,
+                                    correction=bool(cfg[&quot;scaffold-correction&quot;]))
+        save_client_control(context.run_id, pid, c_i_new)
+        out = pack_arrays(model.state_dict(), c_i_new)          # send y and c_i
+    else:
+        raise ValueError(f&quot;unknown method {method!r}&quot;)
+
+    content = RecordDict({
+        &quot;arrays&quot;: ArrayRecord(out),
+        &quot;metrics&quot;: MetricRecord({&quot;num-examples&quot;: len(loader.dataset)}),
+    })
+    return Message(content=content, reply_to=msg)
+
+
+@app.evaluate()
+def client_evaluate(msg: Message, context: Context):
+    &quot;&quot;&quot;Not used (server evaluates centrally), kept so the app stays valid.&quot;&quot;&quot;
+    pid = int(context.node_config[&quot;partition-id&quot;])
+    model_state, _ = split_arrays(msg.content[&quot;arrays&quot;].to_torch_state_dict())
+    model = make_model()
+    model.load_state_dict(model_state)
+    loader = test_loaders()[str(pid)]
+    metrics = MetricRecord({&quot;accuracy&quot;: evaluate(model, loader),
+                            &quot;num-examples&quot;: len(loader.dataset)})
+    return Message(content=RecordDict({&quot;metrics&quot;: metrics}), reply_to=msg)</code></pre></div>
+
+</section>
+<section class="step" id="s6">
+<div class="step-head"><span class="num">6</span><h2>Replace server_app.py</h2><label class="done"><input type="checkbox" data-step="6"> Done</label></div>
+
+<p>The server builds the initial model from the same seed as the baselines, runs the rounds with Flower's <code>FedAvg</code> strategy, and scores the global model centrally on every hospital's test set after each round. That central evaluation is what writes the CSV rows.</p>
+<div class="code"><div class="code-head"><span>heart_fl/server_app.py</span><button class="copy" type="button">Copy</button></div><pre><code>&quot;&quot;&quot;Flower ServerApp for Fed-Heart-Disease. FedAvg or SCAFFOLD, evaluated centrally.&quot;&quot;&quot;
+from collections import OrderedDict
+
+from flwr.app import ArrayRecord, Context, MetricRecord
+from flwr.serverapp import Grid, ServerApp
+from flwr.serverapp.strategy import FedAvg
+
+from heart_fl.harness import (NUM_CLIENTS, array_bytes, evaluate_all, log, make_model,
+                              pack_arrays, set_seed, split_arrays, zeros_like_params)
+
+app = ServerApp()
+
+
+@app.main()
+def main(grid: Grid, context: Context) -&gt; None:
+    cfg = context.run_config
+    method = cfg[&quot;method&quot;]
+    seed, lr = int(cfg[&quot;seed&quot;]), float(cfg[&quot;lr&quot;])
+    epochs, rounds = int(cfg[&quot;local-epochs&quot;]), int(cfg[&quot;num-server-rounds&quot;])
+
+    set_seed(seed)                       # same initial model as the baselines
+    model = make_model()
+    init = OrderedDict(model.state_dict())
+    if method == &quot;scaffold&quot;:             # add server control variate c = 0
+        init = pack_arrays(init, zeros_like_params(model))
+    upload_per_client = array_bytes(init)    # SCAFFOLD is ~2x FedAvg
+
+    name = method
+    if method == &quot;scaffold&quot; and not cfg[&quot;scaffold-correction&quot;]:
+        name = &quot;scaffold-check&quot;          # should match fedavg exactly
+
+    def global_evaluate(server_round: int, arrays: ArrayRecord) -&gt; MetricRecord:
+        model_state, _ = split_arrays(arrays.to_torch_state_dict())
+        m = make_model()
+        m.load_state_dict(model_state)
+        accs = evaluate_all(m)
+        log(name, seed, accs, round_=server_round,
+            bytes_uploaded=server_round * NUM_CLIENTS * upload_per_client,
+            lr=lr, local_epochs=epochs)
+        return MetricRecord({f&quot;acc_{k}&quot;: v for k, v in accs.items()})
+
+    # All 4 hospitals train every round; no client-side evaluation.
+    # FedAvg averages everything in the returned arrays, so for SCAFFOLD it
+    # averages the models (new x) AND the client c_i&#x27;s (new c).
+    strategy = FedAvg(fraction_train=1.0, fraction_evaluate=0.0)
+    strategy.start(grid=grid, initial_arrays=ArrayRecord(init),
+                   num_rounds=rounds, evaluate_fn=global_evaluate)</code></pre></div>
+<p>Why SCAFFOLD can reuse <code>FedAvg</code> is explained under <a href="#ref-scaffold">How SCAFFOLD fits in</a>.</p>
+
+</section>
+<section class="step" id="s7">
+<div class="step-head"><span class="num">7</span><h2>Smoke-test FedAvg</h2><label class="done"><input type="checkbox" data-step="7"> Done</label></div>
+
+<p>Run three rounds to check everything is wired up before spending time on full runs.</p>
+<div class="code"><div class="code-head"><span>Terminal</span><button class="copy" type="button">Copy</button></div><pre><code>flwr run . --run-config &quot;num-server-rounds=3&quot;</code></pre></div>
+<p>Then open <code>results/results.csv</code>. You should see <code>fedavg</code> rows for rounds 0 through 3, five rows per round (hospitals 0–3 plus <code>pooled</code>), and accuracy rising after round 0. Round 0 is the untrained model, so it sits near chance.</p>
+<p class="note">If <code>flwr run</code> returns immediately and no rows appear, your version runs jobs in the background. Add <code>--stream</code> to each <code>flwr run</code> command so runs execute one at a time.</p>
+
+</section>
+<section class="step" id="s8">
+<div class="step-head"><span class="num">8</span><h2>Sanity-check SCAFFOLD</h2><label class="done"><input type="checkbox" data-step="8"> Done</label></div>
+
+<p>With the correction switched off, SCAFFOLD's local steps are exactly FedAvg's. So with the same seed, the accuracies must match FedAvg to the last digit. Only <code>bytes_uploaded</code> differs (twice as large). If they don't match, there's a bug. Find it now, not after the full runs.</p>
+<div class="code"><div class="code-head"><span>Terminal</span><button class="copy" type="button">Copy</button></div><pre><code>flwr run . --run-config &quot;method=&#x27;fedavg&#x27; num-server-rounds=5&quot;
+flwr run . --run-config &quot;method=&#x27;scaffold&#x27; scaffold-correction=false num-server-rounds=5&quot;
+flwr run . --run-config &quot;method=&#x27;scaffold&#x27; num-server-rounds=5&quot;</code></pre></div>
+<p>Compare the round-5 rows for <code>fedavg</code> and <code>scaffold-check</code>: identical. The real <code>scaffold</code> run should differ a little. Screenshot the matching rows; it's good evidence for your notebook.</p>
+
+</section>
+<section class="step" id="s9">
+<div class="step-head"><span class="num">9</span><h2>Run everything, 5 seeds</h2><label class="done"><input type="checkbox" data-step="9"> Done</label></div>
+
+<p>Set <code>LR</code> at the top of <code>run_all.sh</code> to your chosen value, commit, then run it. It archives any old results, runs pooled and local for 5 seeds, runs FedAvg and SCAFFOLD for 5 seeds each, and builds the summary.</p>
+<div class="code"><div class="code-head"><span>run_all.sh</span><button class="copy" type="button">Copy</button></div><pre><code>#!/usr/bin/env bash
+# Runs every baseline for 5 seeds, then builds the table and plots.
+set -e
+SEEDS=&quot;0 1 2 3 4&quot;
+LR=0.01          # set this to the value you picked in step 3
+
+mkdir -p results
+if [ -f results/results.csv ]; then     # keep old runs, don&#x27;t mix them in
+  mv results/results.csv &quot;results/old_results_$(date +%Y%m%d_%H%M%S).csv&quot;
+fi
+rm -rf scaffold_state
+
+python baselines.py --seeds $SEEDS --lr $LR --epochs 50
+for s in $SEEDS; do
+  flwr run . --run-config &quot;method=&#x27;fedavg&#x27; seed=$s lr=$LR&quot;
+  flwr run . --run-config &quot;method=&#x27;scaffold&#x27; seed=$s lr=$LR&quot;
+done
+python summarize.py</code></pre></div>
+<div class="code"><div class="code-head"><span>Terminal</span><button class="copy" type="button">Copy</button></div><pre><code>./run_all.sh</code></pre></div>
+<details><summary>On Windows (PowerShell) instead</summary><div class="code"><div class="code-head"><span>run_all.ps1</span><button class="copy" type="button">Copy</button></div><pre><code>$SEEDS = 0,1,2,3,4
+$LR = 0.01
+New-Item -ItemType Directory -Force results | Out-Null
+if (Test-Path results/results.csv) { Move-Item results/results.csv &quot;results/old_results_$(Get-Date -Format yyyyMMdd_HHmmss).csv&quot; }
+Remove-Item -Recurse -Force scaffold_state -ErrorAction SilentlyContinue
+python baselines.py --seeds 0 1 2 3 4 --lr $LR --epochs 50
+foreach ($s in $SEEDS) {
+  flwr run . --run-config &quot;method=&#x27;fedavg&#x27; seed=$s lr=$LR&quot;
+  flwr run . --run-config &quot;method=&#x27;scaffold&#x27; seed=$s lr=$LR&quot;
+}
+python summarize.py</code></pre></div></details>
+
+</section>
+<section class="step" id="s10">
+<div class="step-head"><span class="num">10</span><h2>Read the results</h2><label class="done"><input type="checkbox" data-step="10"> Done</label></div>
+
+<p><code>summarize.py</code> writes three files to <code>results/</code>:</p>
+<ul>
+<li><strong>summary.md:</strong> per-hospital accuracy (mean ± std over seeds) for every method, then the mean and worst hospital for each method, then the fraction of the local-to-pooled gap each federated method closes.</li>
+<li><strong>accuracy_vs_round.png:</strong> FedAvg and SCAFFOLD learning curves, with the final pooled and local accuracy as reference lines.</li>
+<li><strong>accuracy_vs_bytes.png:</strong> the same curves against bytes uploaded, where SCAFFOLD pays for its 2× communication.</li>
+</ul>
+<div class="code"><div class="code-head"><span>summarize.py</span><button class="copy" type="button">Copy</button></div><pre><code>&quot;&quot;&quot;Turn results/results.csv into a table (results/summary.md) and two plots.
+
+    python summarize.py
+&quot;&quot;&quot;
+import matplotlib
+matplotlib.use(&quot;Agg&quot;)
+import matplotlib.pyplot as plt
+import pandas as pd
+
+df = pd.read_csv(&quot;results/results.csv&quot;, dtype={&quot;client&quot;: str})
+hospitals = df[df[&quot;client&quot;] != &quot;pooled&quot;]
+
+# ---------- final-round table
+final = hospitals[hospitals[&quot;round&quot;] ==
+                  hospitals.groupby([&quot;method&quot;, &quot;seed&quot;])[&quot;round&quot;].transform(&quot;max&quot;)]
+mean = final.groupby([&quot;client&quot;, &quot;method&quot;])[&quot;accuracy&quot;].mean().unstack(&quot;method&quot;)
+std = final.groupby([&quot;client&quot;, &quot;method&quot;])[&quot;accuracy&quot;].std().unstack(&quot;method&quot;).fillna(0)
+order = [&quot;local&quot;, &quot;pooled&quot;, &quot;fedavg&quot;, &quot;scaffold&quot;, &quot;scaffold-check&quot;]
+methods = [m for m in order if m in mean.columns] + \
+          [m for m in mean.columns if m not in order]
+
+lines = [&quot;## Per-hospital test accuracy (mean ± std over seeds)&quot;, &quot;&quot;,
+         &quot;| hospital | &quot; + &quot; | &quot;.join(methods) + &quot; |&quot;,
+         &quot;|---&quot; * (len(methods) + 1) + &quot;|&quot;]
+for c in mean.index:
+    lines.append(f&quot;| {c} | &quot; + &quot; | &quot;.join(
+        f&quot;{mean.loc[c, m]:.3f} ± {std.loc[c, m]:.3f}&quot; for m in methods) + &quot; |&quot;)
+
+lines += [&quot;&quot;, &quot;## Summary&quot;, &quot;&quot;, &quot;| method | mean over hospitals | worst hospital |&quot;,
+          &quot;|---|---|---|&quot;]
+for m in methods:
+    lines.append(f&quot;| {m} | {mean[m].mean():.3f} | {mean[m].min():.3f} |&quot;)
+
+if {&quot;local&quot;, &quot;pooled&quot;} &lt;= set(methods):
+    gap = mean[&quot;pooled&quot;] - mean[&quot;local&quot;]
+    lines += [&quot;&quot;, &quot;## Fraction of gap closed: (fed − local) / (pooled − local)&quot;, &quot;&quot;]
+    for m in methods:
+        if m in (&quot;local&quot;, &quot;pooled&quot;):
+            continue
+        closed = ((mean[m] - mean[&quot;local&quot;]) / gap.where(gap.abs() &gt; 1e-9)).mean()
+        lines.append(f&quot;- {m}: {closed:.2f}&quot;)
+
+out = &quot;\n&quot;.join(lines)
+print(out)
+with open(&quot;results/summary.md&quot;, &quot;w&quot;) as f:
+    f.write(out + &quot;\n&quot;)
+
+# ---------- curves: mean accuracy over hospitals, averaged over seeds
+fed = hospitals[hospitals[&quot;round&quot;] &gt;= 0]
+curves = fed.groupby([&quot;method&quot;, &quot;seed&quot;, &quot;round&quot;, &quot;bytes_uploaded&quot;])[&quot;accuracy&quot;].mean() \
+            .groupby([&quot;method&quot;, &quot;round&quot;, &quot;bytes_uploaded&quot;]).mean().reset_index()
+
+for x, fname, label in [(&quot;round&quot;, &quot;accuracy_vs_round.png&quot;, &quot;server round&quot;),
+                        (&quot;bytes_uploaded&quot;, &quot;accuracy_vs_bytes.png&quot;, &quot;total bytes uploaded&quot;)]:
+    fig, ax = plt.subplots(figsize=(6, 4))
+    for m, g in curves.groupby(&quot;method&quot;):
+        ax.plot(g[x], g[&quot;accuracy&quot;], label=m)
+    for m, style in [(&quot;pooled&quot;, &quot;--&quot;), (&quot;local&quot;, &quot;:&quot;)]:
+        if m in mean.columns:
+            ax.axhline(mean[m].mean(), linestyle=style, color=&quot;grey&quot;, label=f&quot;{m} (final)&quot;)
+    ax.set_xlabel(label)
+    ax.set_ylabel(&quot;mean test accuracy over hospitals&quot;)
+    ax.set_title(&quot;Fed-Heart-Disease&quot;)
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(f&quot;results/{fname}&quot;, dpi=150)
+    print(f&quot;saved results/{fname}&quot;)</code></pre></div>
+<h3>What to expect</h3>
+<p>FedAvg should land close to pooled; Fed-Heart-Disease is one of the two FLamby datasets where federated reaches pooled. Local-only should be weaker, especially at the small hospitals. SCAFFOLD will probably be within noise of FedAvg, because four hospitals with one local epoch leaves little room for client drift. That's a valid result: it means this dataset doesn't stress drift, not that SCAFFOLD failed.</p>
+<p class="note">Red flag: FedAvg far below pooled. On this dataset that almost always means a bug (wrong test sets, mismatched learning rate, or aggregation that isn't using all four hospitals).</p>
+
+</section>
+<section class="step" id="s11">
+<div class="step-head"><span class="num">11</span><h2>Show your work</h2><label class="done"><input type="checkbox" data-step="11"> Done</label></div>
+
+<p>Commit the code and <code>results/</code> together, then write the notebook entry. The template below covers what the grading rubric asks for: goals, work done, evidence, decisions, and next steps.</p>
+<div class="code"><div class="code-head"><span>Notebook entry template</span><button class="copy" type="button">Copy</button></div><pre><code>## Week of ____ : Fed-Heart-Disease baselines
+
+**Goal:** establish local-only, pooled, FedAvg, and SCAFFOLD baselines on Fed-Heart-Disease (FLamby).
+
+**What I did**
+- Code: commit `_______` (repo: ______)
+- Model: FLamby Baseline (logistic regression), plain SGD, lr = ____ (picked from {0.001, 0.01, 0.1} on pooled)
+- Federated: 4 hospitals, all train every round, 50 rounds x 1 local epoch; pooled/local: 50 epochs
+- 5 seeds per method; evaluated on each hospital&#x27;s own test set
+
+**Results**
+(paste results/summary.md and results/accuracy_vs_round.png)
+
+**Interpretation**
+- FedAvg vs pooled: ____
+- SCAFFOLD vs FedAvg: ____ (at 2x bytes uploaded)
+- Worst hospital: ____
+
+**Decisions / problems**
+- SCAFFOLD uses sample-weighted averaging and full participation, so the server update is plain averaging of models and control variates.
+- Sanity check: SCAFFOLD with correction off matched FedAvg exactly (yes / no).
+
+**Next steps:** ____</code></pre></div>
+<p>For the Team Wiki, a short page with the command to reproduce (<code>./run_all.sh</code>), the commit hash, and the summary table is enough.</p>
+
+</section>
+
+<section class="ref" id="ref-scaffold">
+<h2>How SCAFFOLD fits in</h2>
+<p>In SCAFFOLD the server keeps two things: the model <code>x</code> and a control variate <code>c</code>, the average drift direction. Each hospital keeps its own <code>c_i</code>. Every local step uses <code>g − c_i + c</code> instead of the plain gradient <code>g</code>: it removes the hospital's own drift and adds back the shared one, so hospitals stop pulling the model toward what suits only them.</p>
+<p>After local training, a hospital refreshes its estimate with <code>c_i_new = c_i − c + (x − y) / (K · lr)</code>, where <code>y</code> is its trained model and <code>K</code> the number of local steps.</p>
+<p>The server update is normally <code>x ← x + mean(Δy)</code> and <code>c ← c + mean(Δc_i)</code>. When every hospital participates in every round, as here, those reduce to "average the models" and "average the <code>c_i</code>'s". That's what <code>FedAvg</code> already does to whatever arrays it receives. So each hospital sends its weights and its <code>c_i</code> in one bundle (control tensors are prefixed <code>c.</code>), and <code>FedAvg</code> produces the new <code>x</code> and the new <code>c</code> in one step. No custom strategy is needed.</p>
+<p>Two choices to record in your notebook: averaging is weighted by sample count (the same as your FedAvg arm), and this shortcut only holds with full participation. If you ever sample a subset of hospitals per round, you'd need a proper custom strategy.</p>
+</section>
+
+<section class="ref" id="ref-trouble">
+<h2>Troubleshooting</h2>
+<table>
+<thead><tr><th>What you see</th><th>What to do</th></tr></thead>
+<tbody>
+<tr><td><code>ImportError</code> for <code>flwr.app</code> or <code>flwr.serverapp</code></td><td>Your Flower predates the Message API. Upgrade with <code>pip install -U flwr</code>, or send me your files for the older API.</td></tr>
+<tr><td><code>ModuleNotFoundError: heart_fl</code></td><td>Run commands from the project folder, and run <code>pip install -e .</code> there once.</td></tr>
+<tr><td>FLamby can't find the dataset</td><td>Re-run FLamby's <code>download.py</code>, or <code>update_config.py --new-path</code> if you moved the data.</td></tr>
+<tr><td><code>KeyError: 'scaffold-correction'</code> (or another key)</td><td>That key is missing from <code>[tool.flwr.app.config]</code>. Copy the whole block from step 4.</td></tr>
+<tr><td>Run-config parse error</td><td>String values need single quotes: <code>"method='scaffold'"</code>. Numbers and booleans don't.</td></tr>
+<tr><td><code>flwr run</code> returns instantly, no rows</td><td>Add <code>--stream</code> to each <code>flwr run</code>.</td></tr>
+<tr><td><code>scaffold-check</code> doesn't match <code>fedavg</code></td><td>A bug in the SCAFFOLD path. Confirm both runs used the same seed and learning rate, and that <code>scaffold-correction=false</code> reached the client.</td></tr>
+<tr><td>SCAFFOLD gives NaN or wild accuracy</td><td>Lower the learning rate. The correction scales with <code>1 / (K · lr)</code>, so a tiny <code>lr</code> with few steps can blow it up, and a large one can overshoot.</td></tr>
+<tr><td>Table mixes old and new runs</td><td><code>summarize.py</code> averages every row with the same method name. Use <code>run_all.sh</code>, which archives old results first.</td></tr>
+<tr><td>Accuracy never moves off one value</td><td>The model predicts one class. Raise the learning rate or epochs.</td></tr>
+</tbody></table>
+</section>
+
+<section class="ref" id="ref-terms">
+<h2>Terms</h2>
+<dl>
+<dt>Harness</dt><dd>The shared code that runs every method the same way, so comparisons are fair.</dd>
+<dt>Pooled</dt><dd>One model trained on all hospitals' data combined. The accuracy ceiling.</dd>
+<dt>Local-only</dt><dd>Each hospital trains alone. The accuracy floor.</dd>
+<dt>Client drift</dt><dd>With different data, each hospital's local training pulls the model toward what suits it, so the average lands somewhere worse.</dd>
+<dt>Control variate</dt><dd>SCAFFOLD's running estimate of a drift direction: <code>c_i</code> per hospital, <code>c</code> on the server.</dd>
+<dt>Bytes uploaded</dt><dd>Total data hospitals send to the server. The real communication cost in cross-silo FL, which is why the second plot uses it.</dd>
+<dt>Fraction of gap closed</dt><dd><code>(federated − local) / (pooled − local)</code>. 1 means federated matches pooled; 0 means it's no better than training alone.</dd>
+</dl>
+</section>
+</main>
+</div>
+<script>
+(function() {
+  var KEY = "heart-fl-guide-steps";
+  var total = 12;
+  var done = {};
+  try { done = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (e) { done = {}; }
+  var boxes = document.querySelectorAll('input[data-step]');
+  function render() {
+    var n = 0;
+    for (var i = 0; i < total; i++) {
+      var on = !!done[i];
+      if (on) n++;
+      var sec = document.getElementById('s' + i);
+      if (sec) sec.classList.toggle('is-done', on);
+    }
+    boxes.forEach(function(b) { b.checked = !!done[b.dataset.step]; });
+    document.getElementById('meter').style.width = (100 * n / total) + '%';
+    document.getElementById('count').textContent = n + ' of ' + total + ' steps done';
+  }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(done)); } catch (e) {} }
+  boxes.forEach(function(b) {
+    b.addEventListener('change', function() { done[b.dataset.step] = b.checked; save(); render(); });
+  });
+  document.getElementById('reset').addEventListener('click', function() { done = {}; save(); render(); });
+  render();
+
+  document.querySelectorAll('.copy').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var text = btn.closest('.code').querySelector('code').textContent;
+      function ok() { btn.textContent = 'Copied'; btn.classList.add('ok');
+        setTimeout(function() { btn.textContent = 'Copy'; btn.classList.remove('ok'); }, 1400); }
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(ok, fallback);
+      } else { fallback(); }
+      function fallback() {
+        var ta = document.createElement('textarea'); ta.value = text;
+        ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); ok(); } catch (e) { btn.textContent = 'Select and copy'; }
+        document.body.removeChild(ta);
+      }
+    });
+  });
+})();
+</script>
+</body>
+</html>

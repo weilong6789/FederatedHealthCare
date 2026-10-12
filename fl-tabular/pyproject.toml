@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fltab"
+version = "0.1.0"
+description = "FedAvg baselines on FLamby Fed-Heart-Disease"
+dependencies = [
+    "flwr[simulation]>=1.30.0",
+    "torch>=2.2.0",
+    "pandas>=2.0.0",
+    "matplotlib>=3.8.0",
+    # plus FLamby, which is not on PyPI -- see README for how to install it
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["fltab"]
+
+[tool.flwr.app]
+publisher = "orlando"
+
+[tool.flwr.app.components]
+serverapp = "fltab.server_app:app"
+clientapp = "fltab.client_app:app"
+
+# Everything here is overridable at the command line, e.g.
+#   flwr run . --run-config "num-server-rounds=3 seed=1"
+[tool.flwr.app.config]
+num-server-rounds = 50
+local-epochs = 1
+lr = 0.01
+seed = 0
