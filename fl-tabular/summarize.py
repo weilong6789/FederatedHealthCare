@@ -124,7 +124,7 @@ def summary(k):
 lines += ["", "## Summary", ""]
 for k in metrics:
     if len(metrics) > 1:
-        lines += [f"{LABELS[k].capitalize()}:", ""]
+        lines += [f"{LABELS[k][0].upper()}{LABELS[k][1:]}:", ""]
     lines += summary(k) + [""]
 if balance:
     lines += ["`mean over hospitals` weights every hospital equally, so hospital 2 (16 test",
