@@ -13,6 +13,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from sklearn.metrics import balanced_accuracy_score, roc_auc_score
 from torch.utils.data import DataLoader
 from flamby.datasets.fed_heart_disease import (
     BATCH_SIZE,
@@ -29,8 +30,9 @@ from flamby.datasets.fed_heart_disease import (
 # (or set FLTAB_ROOT to it).
 ROOT = Path(os.environ.get("FLTAB_ROOT", Path.cwd()))
 RESULTS_PATH = ROOT / "results" / "results.csv"
+METRICS = ["accuracy", "balanced_accuracy", "auc"]
 FIELDS = ["timestamp", "commit", "method", "seed", "round", "client",
-          "accuracy", "bytes_uploaded", "lr", "local_epochs"]
+          *METRICS, "bytes_uploaded", "lr", "local_epochs"]
 
 
 # ---------------------------------------------------------------- setup
@@ -83,16 +85,29 @@ def train_sgd(model, loader, lr, epochs):
 # ---------------------------------------------------------------- evaluation
 @torch.no_grad()
 def evaluate(model, loader):
+    """Accuracy, balanced accuracy and AUC on one test set.
+
+    The model outputs P(disease). Accuracy (FLamby's `metric`) and balanced
+    accuracy threshold it at 0.5; AUC ranks patients by it directly. Always
+    predicting one label scores 0.5 on both balanced accuracy and AUC, however
+    skewed the test set is. AUC is NaN on a test set with only one label.
+    """
     model.eval()
     ys, preds = [], []
     for xb, yb in loader:
         ys.append(yb)
         preds.append(model(xb))
-    return float(metric(torch.cat(ys).numpy(), torch.cat(preds).numpy()))
+    y = torch.cat(ys).numpy().reshape(-1).astype(int)
+    p = torch.cat(preds).numpy().reshape(-1)
+    return {
+        "accuracy": float(metric(y, p)),
+        "balanced_accuracy": float(balanced_accuracy_score(y, (p > 0.5).astype(int))),
+        "auc": float(roc_auc_score(y, p)) if len(np.unique(y)) == 2 else float("nan"),
+    }
 
 
 def evaluate_all(model):
-    """Accuracy on every hospital's test set and on the pooled test set."""
+    """All metrics on every hospital's test set and on the pooled test set."""
     return {name: evaluate(model, dl) for name, dl in test_loaders().items()}
 
 
@@ -110,19 +125,23 @@ def _git_commit():
         return "nogit"
 
 
-def log(method, seed, accs, round_=-1, bytes_uploaded=0, lr=None, local_epochs=None):
-    """Append one row per client to results/results.csv."""
+def log(method, seed, results, round_=-1, bytes_uploaded=0, lr=None, local_epochs=None):
+    """Append one row per client to results/results.csv.
+
+    `results` maps client -> the metrics dict from `evaluate`.
+    """
     RESULTS_PATH.parent.mkdir(exist_ok=True)
     new_file = not RESULTS_PATH.exists()
     with open(RESULTS_PATH, "a", newline="") as f:
         w = csv.DictWriter(f, fieldnames=FIELDS)
         if new_file:
             w.writeheader()
-        for client, acc in accs.items():
+        for client, metrics in results.items():
             w.writerow({
                 "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
                 "commit": _git_commit(), "method": method, "seed": seed,
-                "round": round_, "client": client, "accuracy": round(acc, 4),
+                "round": round_, "client": client,
+                **{k: round(metrics[k], 4) for k in METRICS},
                 "bytes_uploaded": bytes_uploaded, "lr": lr,
                 "local_epochs": local_epochs,
             })

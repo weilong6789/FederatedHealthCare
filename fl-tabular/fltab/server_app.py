@@ -35,11 +35,12 @@ def main(grid: Grid, context: Context) -> None:
     def global_evaluate(server_round: int, arrays: ArrayRecord) -> MetricRecord:
         m = make_model()
         m.load_state_dict(arrays.to_torch_state_dict())
-        accs = evaluate_all(m)
-        log("fedavg", seed, accs, round_=server_round,
+        results = evaluate_all(m)
+        log("fedavg", seed, results, round_=server_round,
             bytes_uploaded=server_round * NUM_CLIENTS * upload_per_client,
             lr=lr, local_epochs=epochs)
-        return MetricRecord({f"acc_{k}": v for k, v in accs.items()})
+        return MetricRecord({f"{k}_{client}": v for client, metrics in results.items()
+                             for k, v in metrics.items()})
 
     # All 4 hospitals train every round; no client-side evaluation.
     strategy = FedAvg(fraction_train=1.0, fraction_evaluate=0.0)

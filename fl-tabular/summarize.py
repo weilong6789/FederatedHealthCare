@@ -1,4 +1,4 @@
-"""Turn results/results.csv into a table (results/summary.md) and two plots.
+"""Turn results/results.csv into tables (results/summary.md) and plots.
 
     python summarize.py
 """
@@ -9,11 +9,18 @@ import numpy as np
 import pandas as pd
 
 
+# Balanced accuracy and AUC score 0.5 for always predicting one label, on any
+# test set. Older logs only have accuracy; their other columns are skipped.
+LABELS = {"accuracy": "accuracy", "balanced_accuracy": "balanced accuracy",
+          "auc": "AUC"}
+
+
 # ---------- majority-class baseline, read from the data itself
 def class_balance():
-    """Per hospital: test-set size, the accuracy of always predicting that
-    hospital's more common label, and whether its training set has one label
-    only (a model trained there alone can then only learn to say that label)."""
+    """Per hospital: test-set size and label counts, the accuracy of always
+    predicting that hospital's more common label, and whether its training set
+    has one label only (a model trained there alone can then only learn to say
+    that label)."""
     from flamby.datasets.fed_heart_disease import NUM_CLIENTS, FedHeartDisease
     out = {}
     for i in range(NUM_CLIENTS):
@@ -21,6 +28,8 @@ def class_balance():
              for t in (True, False)
              for ds in [FedHeartDisease(center=i, train=t, pooled=False)]}
         out[str(i)] = {"n_test": len(y[False]),
+                       "n_test_1": int(y[False].sum()),
+                       "n_test_0": int(len(y[False]) - y[False].sum()),
                        "baseline": max(y[False].mean(), 1 - y[False].mean()),
                        "one_class_train": y[True].min() == y[True].max()}
     return out
@@ -34,12 +43,15 @@ except Exception as exc:          # still summarise if FLamby isn't importable
 
 df = pd.read_csv("results/results.csv", dtype={"client": str})
 hospitals = df[df["client"] != "pooled"]
+metrics = [m for m in LABELS if m in df.columns]
 
-# ---------- final-round table
+# ---------- final-round tables
 final = hospitals[hospitals["round"] ==
                   hospitals.groupby(["method", "seed"])["round"].transform("max")]
-mean = final.groupby(["client", "method"])["accuracy"].mean().unstack("method")
-std = final.groupby(["client", "method"])["accuracy"].std().unstack("method").fillna(0)
+by = final.groupby(["client", "method"])
+means = {m: by[m].mean().unstack("method") for m in metrics}
+stds = {m: by[m].std().unstack("method").fillna(0) for m in metrics}
+mean, std = means["accuracy"], stds["accuracy"]
 order = ["local", "pooled", "fedavg"]
 methods = [m for m in order if m in mean.columns] + \
           [m for m in mean.columns if m not in order]
@@ -79,25 +91,45 @@ if balance:
     lines += table(["hospital"] + methods,
                    [[name(c)] + [f"{lift.loc[c, m]:+.3f}" for m in methods] for c in lift.index])
 
+for k in metrics[1:]:
+    lines += ["", f"## Per-hospital test {LABELS[k]} (mean ± std over seeds)", ""]
+    lines += table(["hospital"] + methods,
+                   [[name(c)] + [f"{means[k].loc[c, m]:.3f} ± {stds[k].loc[c, m]:.3f}"
+                                 for m in methods] for c in means[k].index])
+if len(metrics) > 1:
+    lines += ["", "Always predicting one label scores 0.500 on balanced accuracy and AUC at",
+              "every hospital, however skewed its test set, so 0.500 is the bar to beat."]
+
+
+def summary(k):
+    """Mean, test-n-weighted mean and worst hospital for metric k, per method."""
+    head = ["method", "mean over hospitals", "worst hospital"]
+    rows = [[m, f"{means[k][m].mean():.3f}", f"{means[k][m].min():.3f}"] for m in methods]
+    if balance:
+        # Weighted by test-set size: one patient counts the same everywhere, so
+        # a 16-patient hospital stops counting as much as a 104-patient one.
+        n = pd.Series({c: balance[c]["n_test"] for c in means[k].index})
+        head.insert(2, "weighted by test n")
+        for row, m in zip(rows, methods):
+            v = means[k][m].dropna()
+            row.insert(2, f"{(v * n[v.index]).sum() / n[v.index].sum():.3f}")
+        if k == "accuracy":
+            head += ["mean lift over baseline", "hospitals beaten"]
+            for row, m in zip(rows, methods):
+                row += [f"{lift[m].mean():+.3f}",
+                        f"{int((lift[m] > 0).sum())} of {len(lift)}"]
+    return table(head, rows)
+
+
 lines += ["", "## Summary", ""]
-head = ["method", "mean over hospitals", "worst hospital"]
-rows = [[m, f"{mean[m].mean():.3f}", f"{mean[m].min():.3f}"] for m in methods]
+for k in metrics:
+    if len(metrics) > 1:
+        lines += [f"{LABELS[k].capitalize()}:", ""]
+    lines += summary(k) + [""]
 if balance:
-    # Weighted by test-set size: one patient counts the same everywhere, so a
-    # 16-patient hospital stops counting as much as a 104-patient one.
-    n = pd.Series({c: balance[c]["n_test"] for c in mean.index})
-    head.insert(2, "weighted by test n")
-    head += ["mean lift over baseline", "hospitals beaten"]
-    for row, m in zip(rows, methods):
-        acc = mean[m].dropna()
-        row.insert(2, f"{(acc * n[acc.index]).sum() / n[acc.index].sum():.3f}")
-        row += [f"{lift[m].mean():+.3f}", f"{int((lift[m] > 0).sum())} of {len(lift)}"]
-lines += table(head, rows)
-if balance:
-    lines += ["",
-              "`mean over hospitals` weights every hospital equally, so hospital 2 (16 test",
+    lines += ["`mean over hospitals` weights every hospital equally, so hospital 2 (16 test",
               "patients) counts as much as hospital 0 (104). `weighted by test n` weights each",
-              "hospital by its test-set size, which is the per-patient accuracy."]
+              "hospital by its test-set size, which is the per-patient score."]
 
 if balance:
     lines += ["", "## Data caveats", ""]
@@ -112,6 +144,14 @@ if balance:
             lines.append(
                 f"- {name(c)}: only {balance[c]['n_test']} test patients, so its accuracy "
                 f"moves in steps of {1 / balance[c]['n_test']:.3f}.")
+    for c in mean.index:
+        n0, n1 = balance[c]["n_test_0"], balance[c]["n_test_1"]
+        if len(metrics) > 1 and 0 < min(n0, n1) < 5:
+            rare = min(n0, n1)
+            lines.append(
+                f"- {name(c)}: the test set has {n0} patient(s) with label 0 and {n1} with "
+                f"label 1. Half of its balanced accuracy rests on the {rare} rarer one(s), and "
+                f"its AUC on {n0 * n1} label-0/label-1 pairs (steps of {1 / (n0 * n1):.3f}).")
 
 # ---------- what was run, read back from the log so it can't go stale
 def values(g, col):
@@ -132,26 +172,34 @@ print(out)
 with open("results/summary.md", "w") as f:
     f.write(out + "\n")
 
-# ---------- curves: mean accuracy over hospitals, averaged over seeds
+# ---------- curves: mean over hospitals, averaged over seeds
 fed = hospitals[hospitals["round"] >= 0]
-curves = fed.groupby(["method", "seed", "round", "bytes_uploaded"])["accuracy"].mean() \
-            .groupby(["method", "round", "bytes_uploaded"]).mean().reset_index()
+plots = [("accuracy", "round", "server round"),
+         ("accuracy", "bytes_uploaded", "total bytes uploaded")] + \
+        [(k, "round", "server round") for k in metrics[1:]]
 
-for x, fname, label in [("round", "accuracy_vs_round.png", "server round"),
-                        ("bytes_uploaded", "accuracy_vs_bytes.png", "total bytes uploaded")]:
+for k, x, label in plots:
+    curves = fed.groupby(["method", "seed", "round", "bytes_uploaded"])[k].mean() \
+                .groupby(["method", "round", "bytes_uploaded"]).mean().reset_index()
     fig, ax = plt.subplots(figsize=(6, 4))
     for m, g in curves.groupby("method"):
-        ax.plot(g[x], g["accuracy"], label=m)
+        ax.plot(g[x], g[k], label=m)
     for m, style in [("pooled", "--"), ("local", ":")]:
-        if m in mean.columns:
-            ax.axhline(mean[m].mean(), linestyle=style, color="grey", label=f"{m} (final)")
-    if balance:  # a curve below this line is worse than guessing the common label
+        if m in means[k].columns:
+            ax.axhline(means[k][m].mean(), linestyle=style, color="grey",
+                       label=f"{m} (final)")
+    # a curve below this line is no better than always saying one label
+    if k != "accuracy":
+        ax.axhline(0.5, linestyle="-.", color="firebrick", label="chance")
+    elif balance:
         ax.axhline(base.mean(), linestyle="-.", color="firebrick",
                    label="majority class")
     ax.set_xlabel(label)
-    ax.set_ylabel("mean test accuracy over hospitals")
+    ax.set_ylabel(f"mean test {LABELS[k]} over hospitals")
     ax.set_title("Fed-Heart-Disease")
     ax.legend()
     fig.tight_layout()
+    fname = f"{k}_vs_{'bytes' if x == 'bytes_uploaded' else x}.png"
     fig.savefig(f"results/{fname}", dpi=150)
+    plt.close(fig)
     print(f"saved results/{fname}")

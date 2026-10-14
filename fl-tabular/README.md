@@ -25,6 +25,21 @@ Tiny on purpose: one federated run takes about 40 seconds on a laptop.
 Every method uses the same data splits, model, optimizer, and evaluation, all
 from `fltab/harness.py`. Each is scored on every hospital's own test set.
 
+## Metrics
+
+Every evaluation logs three numbers per hospital:
+
+| metric | what it is | always predicting one label scores |
+|---|---|---|
+| `accuracy` | share of patients classified right (threshold 0.5); FLamby's metric | that hospital's majority-class share (0.938 at Switzerland) |
+| `balanced_accuracy` | mean of the share of label-1 patients caught and the share of label-0 patients caught | 0.5 everywhere |
+| `auc` | chance a random label-1 patient gets a higher score than a random label-0 one; ignores the threshold | 0.5 everywhere |
+
+Accuracy alone flatters a model that has collapsed to one answer, which is
+exactly how models fail under heavy DP noise. Read balanced accuracy and AUC
+alongside it. Switzerland's test set has a single label-0 patient, so its
+balanced accuracy and AUC are still noisy; `summary.md` flags this.
+
 ## Setup (once)
 
 Everything runs in the conda env `flamby` (Python 3.10).
@@ -81,7 +96,7 @@ under `[tool.flwr.app.config]`): `num-server-rounds`, `local-epochs`, `lr`,
 | `fltab/client_app.py` | hospital side: load global weights, train locally, send weights back |
 | `fltab/server_app.py` | coordinator: hand out weights, average what comes back, evaluate, repeat |
 | `baselines.py` | the `pooled` and `local` comparisons. No Flower. |
-| `summarize.py` | turns `results/results.csv` into `results/summary.md` and two plots |
+| `summarize.py` | turns `results/results.csv` into `results/summary.md` and plots per metric |
 | `run_all.sh` | runs all of the above for 5 seeds |
 | `pyproject.toml` | dependencies + Flower app config |
 | `results/` | the log (`results.csv`), the table, the plots |
@@ -94,5 +109,5 @@ The point of these baselines is differential privacy, which is not in the
 code yet:
 
 1. **DP** — wrap the strategy in
-   `DifferentialPrivacyServerSideFixedClipping`. Plot ε against accuracy.
+   `DifferentialPrivacyServerSideFixedClipping`. Plot ε against AUC.
 2. **Correlated noise** — compare against the independent-noise baseline from 1.
