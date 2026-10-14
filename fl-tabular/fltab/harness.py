@@ -101,11 +101,12 @@ def array_bytes(state):
 
 
 # ---------------------------------------------------------------- logging
+@lru_cache(maxsize=1)
 def _git_commit():
     try:
         return subprocess.check_output(
             ["git", "rev-parse", "--short", "HEAD"], cwd=ROOT,
-            stderr=subprocess.DEVNULL).decode().strip()
+            stderr=subprocess.DEVNULL, text=True).strip()
     except Exception:
         return "nogit"
 
@@ -114,15 +115,10 @@ def log(method, seed, accs, round_=-1, bytes_uploaded=0, lr=None, local_epochs=N
     """Append one row per client to results/results.csv."""
     RESULTS_PATH.parent.mkdir(exist_ok=True)
     new_file = not RESULTS_PATH.exists()
+    stamp, commit = time.strftime("%Y-%m-%d %H:%M:%S"), _git_commit()
     with open(RESULTS_PATH, "a", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=FIELDS)
+        w = csv.writer(f)
         if new_file:
-            w.writeheader()
-        for client, acc in accs.items():
-            w.writerow({
-                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-                "commit": _git_commit(), "method": method, "seed": seed,
-                "round": round_, "client": client, "accuracy": round(acc, 4),
-                "bytes_uploaded": bytes_uploaded, "lr": lr,
-                "local_epochs": local_epochs,
-            })
+            w.writerow(FIELDS)
+        w.writerows([stamp, commit, method, seed, round_, client, round(acc, 4),
+                     bytes_uploaded, lr, local_epochs] for client, acc in accs.items())
