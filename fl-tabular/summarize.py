@@ -131,6 +131,118 @@ if balance:
               "patients) counts as much as hospital 0 (104). `weighted by test n` weights each",
               "hospital by its test-set size, which is the per-patient score."]
 
+
+# ---------- bootstrap intervals over test patients
+# The ± above only covers retraining (seeds) on the same test patients. These
+# intervals also cover which patients happened to land in each test set:
+# resample a hospital's test patients with replacement, re-score, repeat.
+B = 1000
+
+
+def boot_scores(y, P, pos_idx, neg_idx):
+    """Seed-averaged scores on each resample.
+
+    y: labels (n,). P: predictions (seeds, n). pos_idx / neg_idx: (B, n1) and
+    (B, n0) resampled indices of the label-1 / label-0 patients.
+    Returns metric -> (B,) array.
+    """
+    sp, sn = P[:, pos_idx], P[:, neg_idx]              # (seeds, B, n1|n0)
+    n1, n0 = pos_idx.shape[1], neg_idx.shape[1]
+    tp, tn = (sp > 0.5).sum(-1), (sn <= 0.5).sum(-1)   # 0.5 cutoff, as in evaluate()
+    pairs = sp[..., :, None] - sn[..., None, :]        # every label-1/label-0 pair
+    auc = (pairs > 0).mean((-1, -2)) + 0.5 * (pairs == 0).mean((-1, -2))
+    return {"accuracy": ((tp + tn) / (n1 + n0)).mean(0),
+            "balanced_accuracy": (0.5 * (tp / n1 + tn / n0)).mean(0),
+            "auc": auc.mean(0)}
+
+
+def bootstrap(preds):
+    """method -> hospital -> metric -> (point estimate, (B,) resampled scores).
+
+    Stratified: label-1 and label-0 patients are resampled separately, keeping
+    each hospital's label counts, so every resample has both labels and AUC is
+    always defined. All methods share the same resamples, so differences
+    between methods are paired: they don't pick up which patients were drawn.
+    """
+    rng = np.random.default_rng(0)
+    out = {}
+    for c, g in preds.groupby("client"):
+        probs = g.pivot_table(index=["method", "seed"], columns="patient", values="prob")
+        y = g.groupby("patient")["label"].first().reindex(probs.columns).to_numpy()
+        pos, neg = np.flatnonzero(y == 1), np.flatnonzero(y == 0)
+        if len(pos) == 0 or len(neg) == 0:
+            continue
+        pos_idx = rng.choice(pos, (B, len(pos)))
+        neg_idx = rng.choice(neg, (B, len(neg)))
+        for m in probs.index.get_level_values("method").unique():
+            P = probs.loc[m].to_numpy()
+            point = boot_scores(y, P, pos[None], neg[None])
+            boot = boot_scores(y, P, pos_idx, neg_idx)
+            out.setdefault(m, {})[c] = {k: (point[k][0], boot[k]) for k in boot}
+    return out
+
+
+def ci(samples):
+    lo, hi = np.percentile(samples, [2.5, 97.5])
+    return lo, hi
+
+
+try:
+    preds = pd.read_csv("results/predictions.csv", dtype={"client": str})
+except FileNotFoundError:
+    preds = None
+    print("no results/predictions.csv: skipping bootstrap intervals")
+
+if preds is not None:
+    boot = bootstrap(preds)
+    bmethods = [m for m in methods if m in boot]
+    clients = sorted(set.intersection(*(set(boot[m]) for m in bmethods)))
+    n_test = {c: len(preds[(preds["client"] == c) & (preds["method"] == bmethods[0]) &
+                           (preds["seed"] == preds["seed"].min())]) for c in clients}
+
+    def rows_for(k, value):
+        """Per-hospital rows plus mean and test-n-weighted mean over hospitals.
+        `value(m, c)` returns (point, (B,) samples) for metric k."""
+        rows = [(name(c), {m: value(m, c) for m in bmethods}) for c in clients]
+        w = np.array([n_test[c] for c in clients], float)
+        for label, wts in [("mean over hospitals", np.ones_like(w)),
+                           ("weighted by test n", w)]:
+            agg = {}
+            for m in bmethods:
+                pts, smp = zip(*(value(m, c) for c in clients))
+                agg[m] = (np.average(pts, weights=wts),
+                          np.average(np.stack(smp), axis=0, weights=wts))
+            rows.append((label, agg))
+        return rows
+
+    lines += ["", "## 95% confidence intervals (bootstrap over test patients)", "",
+              f"Each hospital's test patients resampled with replacement, {B} times, keeping",
+              "its label counts; scores averaged over seeds. Unlike the ± above, the interval",
+              "shows how much a score could move with a different draw of test patients.", ""]
+    for k in metrics:
+        lines += [f"{LABELS[k][0].upper()}{LABELS[k][1:]}:", ""]
+        rows = rows_for(k, lambda m, c: boot[m][c][k])
+        lines += table(["hospital"] + bmethods,
+                       [[r] + ["{:.3f} [{:.3f}, {:.3f}]".format(v[m][0], *ci(v[m][1]))
+                               for m in bmethods] for r, v in rows]) + [""]
+
+    if "fedavg" in bmethods and len(bmethods) > 1:
+        others = [m for m in bmethods if m != "fedavg"]
+        lines += ["## FedAvg minus each other method (paired bootstrap)", "",
+                  "`*` marks a difference whose 95% interval excludes 0. Without a `*`, the",
+                  "test sets are too small to say which method is better there.", ""]
+        for k in metrics:
+            lines += [f"{LABELS[k][0].upper()}{LABELS[k][1:]}:", ""]
+            rows = []
+            for r, v in rows_for(k, lambda m, c: boot[m][c][k]):
+                cells = []
+                for o in others:
+                    lo, hi = ci(v["fedavg"][1] - v[o][1])
+                    star = "*" if lo > 0 or hi < 0 else " "
+                    cells.append(f"{v['fedavg'][0] - v[o][0]:+.3f} [{lo:+.3f}, {hi:+.3f}]{star}")
+                rows.append([r] + cells)
+            lines += table(["hospital"] + [f"fedavg − {o}" for o in others], rows) + [""]
+
 if balance:
     lines += ["", "## Data caveats", ""]
     for c in mean.index:
@@ -152,6 +264,11 @@ if balance:
                 f"- {name(c)}: the test set has {n0} patient(s) with label 0 and {n1} with "
                 f"label 1. Half of its balanced accuracy rests on the {rare} rarer one(s), and "
                 f"its AUC on {n0 * n1} label-0/label-1 pairs (steps of {1 / (n0 * n1):.3f}).")
+            if preds is not None:
+                lines.append(
+                    f"- {name(c)}: the bootstrap keeps label counts fixed, so every resample "
+                    f"contains the same {rare} rarer patient(s). Its intervals understate the "
+                    f"real uncertainty; don't draw conclusions from this hospital alone.")
 
 # ---------- what was run, read back from the log so it can't go stale
 def values(g, col):

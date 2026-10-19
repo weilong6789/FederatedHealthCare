@@ -8,7 +8,7 @@ from flwr.serverapp import Grid, ServerApp
 from flwr.serverapp.strategy import FedAvg
 
 from fltab.harness import (NUM_CLIENTS, array_bytes, evaluate_all, log, make_model,
-                              set_seed)
+                              predict_hospitals, save_predictions, set_seed)
 
 app = ServerApp()
 
@@ -39,6 +39,8 @@ def main(grid: Grid, context: Context) -> None:
         log("fedavg", seed, results, round_=server_round,
             bytes_uploaded=server_round * NUM_CLIENTS * upload_per_client,
             lr=lr, local_epochs=epochs)
+        if server_round == rounds:       # final model: keep per-patient predictions
+            save_predictions("fedavg", seed, predict_hospitals(m))
         return MetricRecord({f"{k}_{client}": v for client, metrics in results.items()
                              for k, v in metrics.items()})
 
