@@ -8,6 +8,7 @@ import csv
 import os
 import subprocess
 import time
+import warnings
 from functools import lru_cache
 from pathlib import Path
 
@@ -144,9 +145,12 @@ def evaluate(model, loader):
     skewed the test set is. AUC is NaN on a test set with only one label.
     """
     y, p = predict(model, loader)
+    with warnings.catch_warnings():  # one-label sets (Switzerland) warn every call
+        warnings.simplefilter("ignore")
+        bal = float(balanced_accuracy_score(y, (p > 0.5).astype(int)))
     return {
         "accuracy": float(metric(y, p)),
-        "balanced_accuracy": float(balanced_accuracy_score(y, (p > 0.5).astype(int))),
+        "balanced_accuracy": bal,
         "auc": float(roc_auc_score(y, p)) if len(np.unique(y)) == 2 else float("nan"),
     }
 

@@ -149,6 +149,9 @@ lines += ["", "Chosen (`←`, also in `results/tuned.env`):", "",
           f"- pooled: lr {best['pooled'][0]}",
           f"- local: lr {best['local'][0]}",
           f"- fedavg: lr {best['fedavg'][0]}, {best['fedavg'][1]} local epoch(s) per round", "",
+          "The validation slices are small (98 patients, 17 at Long Beach VA), so gaps",
+          "under about 0.01 between settings are noise: the choice then barely matters,",
+          "and what tuning buys is that the test set played no part in it.", "",
           f"FedAvg convergence: validation AUC changed by {gain:+.4f} over the last {tail} "
           f"rounds. " + ("It has levelled off." if converged else
                          "It is still moving: consider more rounds (--rounds).")]
