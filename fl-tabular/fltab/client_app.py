@@ -40,6 +40,6 @@ def client_evaluate(msg: Message, context: Context):
     model = make_model()
     model.load_state_dict(msg.content["arrays"].to_torch_state_dict())
     loader = test_loaders()[str(pid)]
-    metrics = MetricRecord({"accuracy": evaluate(model, loader),
+    metrics = MetricRecord({**evaluate(model, loader),
                             "num-examples": len(loader.dataset)})
     return Message(content=RecordDict({"metrics": metrics}), reply_to=msg)

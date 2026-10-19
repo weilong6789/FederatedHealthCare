@@ -1,4 +1,4 @@
-"""Turn results/results.csv into a table (results/summary.md) and two plots.
+"""Turn results/results.csv into tables (results/summary.md) and plots.
 
     python summarize.py
 """
@@ -9,11 +9,18 @@ import numpy as np
 import pandas as pd
 
 
+# Balanced accuracy and AUC score 0.5 for always predicting one label, on any
+# test set. Older logs only have accuracy; their other columns are skipped.
+LABELS = {"accuracy": "accuracy", "balanced_accuracy": "balanced accuracy",
+          "auc": "AUC"}
+
+
 # ---------- majority-class baseline, read from the data itself
 def class_balance():
-    """Per hospital: test-set size, the accuracy of always predicting that
-    hospital's more common label, and whether its training set has one label
-    only (a model trained there alone can then only learn to say that label)."""
+    """Per hospital: test-set size and label counts, the accuracy of always
+    predicting that hospital's more common label, and whether its training set
+    has one label only (a model trained there alone can then only learn to say
+    that label)."""
     from flamby.datasets.fed_heart_disease import NUM_CLIENTS, FedHeartDisease
     out = {}
     for i in range(NUM_CLIENTS):
@@ -21,6 +28,8 @@ def class_balance():
              for t in (True, False)
              for ds in [FedHeartDisease(center=i, train=t, pooled=False)]}
         out[str(i)] = {"n_test": len(y[False]),
+                       "n_test_1": int(y[False].sum()),
+                       "n_test_0": int(len(y[False]) - y[False].sum()),
                        "baseline": max(y[False].mean(), 1 - y[False].mean()),
                        "one_class_train": y[True].min() == y[True].max()}
     return out
@@ -34,12 +43,15 @@ except Exception as exc:          # still summarise if FLamby isn't importable
 
 df = pd.read_csv("results/results.csv", dtype={"client": str})
 hospitals = df[df["client"] != "pooled"]
+metrics = [m for m in LABELS if m in df.columns]
 
-# ---------- final-round table
+# ---------- final-round tables
 final = hospitals[hospitals["round"] ==
                   hospitals.groupby(["method", "seed"])["round"].transform("max")]
-mean = final.groupby(["client", "method"])["accuracy"].mean().unstack("method")
-std = final.groupby(["client", "method"])["accuracy"].std().unstack("method").fillna(0)
+by = final.groupby(["client", "method"])
+means = {m: by[m].mean().unstack("method") for m in metrics}
+stds = {m: by[m].std().unstack("method").fillna(0) for m in metrics}
+mean, std = means["accuracy"], stds["accuracy"]
 order = ["local", "pooled", "fedavg"]
 methods = [m for m in order if m in mean.columns] + \
           [m for m in mean.columns if m not in order]
@@ -79,25 +91,157 @@ if balance:
     lines += table(["hospital"] + methods,
                    [[name(c)] + [f"{lift.loc[c, m]:+.3f}" for m in methods] for c in lift.index])
 
+for k in metrics[1:]:
+    lines += ["", f"## Per-hospital test {LABELS[k]} (mean ± std over seeds)", ""]
+    lines += table(["hospital"] + methods,
+                   [[name(c)] + [f"{means[k].loc[c, m]:.3f} ± {stds[k].loc[c, m]:.3f}"
+                                 for m in methods] for c in means[k].index])
+if len(metrics) > 1:
+    lines += ["", "Always predicting one label scores 0.500 on balanced accuracy and AUC at",
+              "every hospital, however skewed its test set, so 0.500 is the bar to beat."]
+
+
+def summary(k):
+    """Mean, test-n-weighted mean and worst hospital for metric k, per method."""
+    head = ["method", "mean over hospitals", "worst hospital"]
+    rows = [[m, f"{means[k][m].mean():.3f}", f"{means[k][m].min():.3f}"] for m in methods]
+    if balance:
+        # Weighted by test-set size: one patient counts the same everywhere, so
+        # a 16-patient hospital stops counting as much as a 104-patient one.
+        n = pd.Series({c: balance[c]["n_test"] for c in means[k].index})
+        head.insert(2, "weighted by test n")
+        for row, m in zip(rows, methods):
+            v = means[k][m].dropna()
+            row.insert(2, f"{(v * n[v.index]).sum() / n[v.index].sum():.3f}")
+        if k == "accuracy":
+            head += ["mean lift over baseline", "hospitals beaten"]
+            for row, m in zip(rows, methods):
+                row += [f"{lift[m].mean():+.3f}",
+                        f"{int((lift[m] > 0).sum())} of {len(lift)}"]
+    return table(head, rows)
+
+
 lines += ["", "## Summary", ""]
-head = ["method", "mean over hospitals", "worst hospital"]
-rows = [[m, f"{mean[m].mean():.3f}", f"{mean[m].min():.3f}"] for m in methods]
+for k in metrics:
+    if len(metrics) > 1:
+        lines += [f"{LABELS[k][0].upper()}{LABELS[k][1:]}:", ""]
+    lines += summary(k) + [""]
 if balance:
-    # Weighted by test-set size: one patient counts the same everywhere, so a
-    # 16-patient hospital stops counting as much as a 104-patient one.
-    n = pd.Series({c: balance[c]["n_test"] for c in mean.index})
-    head.insert(2, "weighted by test n")
-    head += ["mean lift over baseline", "hospitals beaten"]
-    for row, m in zip(rows, methods):
-        acc = mean[m].dropna()
-        row.insert(2, f"{(acc * n[acc.index]).sum() / n[acc.index].sum():.3f}")
-        row += [f"{lift[m].mean():+.3f}", f"{int((lift[m] > 0).sum())} of {len(lift)}"]
-lines += table(head, rows)
-if balance:
-    lines += ["",
-              "`mean over hospitals` weights every hospital equally, so hospital 2 (16 test",
+    lines += ["`mean over hospitals` weights every hospital equally, so hospital 2 (16 test",
               "patients) counts as much as hospital 0 (104). `weighted by test n` weights each",
-              "hospital by its test-set size, which is the per-patient accuracy."]
+              "hospital by its test-set size, which is the per-patient score."]
+
+
+# ---------- bootstrap intervals over test patients
+# The ± above only covers retraining (seeds) on the same test patients. These
+# intervals also cover which patients happened to land in each test set:
+# resample a hospital's test patients with replacement, re-score, repeat.
+B = 1000
+
+
+def boot_scores(y, P, pos_idx, neg_idx):
+    """Seed-averaged scores on each resample.
+
+    y: labels (n,). P: predictions (seeds, n). pos_idx / neg_idx: (B, n1) and
+    (B, n0) resampled indices of the label-1 / label-0 patients.
+    Returns metric -> (B,) array.
+    """
+    sp, sn = P[:, pos_idx], P[:, neg_idx]              # (seeds, B, n1|n0)
+    n1, n0 = pos_idx.shape[1], neg_idx.shape[1]
+    tp, tn = (sp > 0.5).sum(-1), (sn <= 0.5).sum(-1)   # 0.5 cutoff, as in evaluate()
+    pairs = sp[..., :, None] - sn[..., None, :]        # every label-1/label-0 pair
+    auc = (pairs > 0).mean((-1, -2)) + 0.5 * (pairs == 0).mean((-1, -2))
+    return {"accuracy": ((tp + tn) / (n1 + n0)).mean(0),
+            "balanced_accuracy": (0.5 * (tp / n1 + tn / n0)).mean(0),
+            "auc": auc.mean(0)}
+
+
+def bootstrap(preds):
+    """method -> hospital -> metric -> (point estimate, (B,) resampled scores).
+
+    Stratified: label-1 and label-0 patients are resampled separately, keeping
+    each hospital's label counts, so every resample has both labels and AUC is
+    always defined. All methods share the same resamples, so differences
+    between methods are paired: they don't pick up which patients were drawn.
+    """
+    rng = np.random.default_rng(0)
+    out = {}
+    for c, g in preds.groupby("client"):
+        probs = g.pivot_table(index=["method", "seed"], columns="patient", values="prob")
+        y = g.groupby("patient")["label"].first().reindex(probs.columns).to_numpy()
+        pos, neg = np.flatnonzero(y == 1), np.flatnonzero(y == 0)
+        if len(pos) == 0 or len(neg) == 0:
+            continue
+        pos_idx = rng.choice(pos, (B, len(pos)))
+        neg_idx = rng.choice(neg, (B, len(neg)))
+        for m in probs.index.get_level_values("method").unique():
+            P = probs.loc[m].to_numpy()
+            point = boot_scores(y, P, pos[None], neg[None])
+            boot = boot_scores(y, P, pos_idx, neg_idx)
+            out.setdefault(m, {})[c] = {k: (point[k][0], boot[k]) for k in boot}
+    return out
+
+
+def ci(samples):
+    lo, hi = np.percentile(samples, [2.5, 97.5])
+    return lo, hi
+
+
+try:
+    preds = pd.read_csv("results/predictions.csv", dtype={"client": str})
+except FileNotFoundError:
+    preds = None
+    print("no results/predictions.csv: skipping bootstrap intervals")
+
+if preds is not None:
+    boot = bootstrap(preds)
+    bmethods = [m for m in methods if m in boot]
+    clients = sorted(set.intersection(*(set(boot[m]) for m in bmethods)))
+    n_test = {c: len(preds[(preds["client"] == c) & (preds["method"] == bmethods[0]) &
+                           (preds["seed"] == preds["seed"].min())]) for c in clients}
+
+    def rows_for(k, value):
+        """Per-hospital rows plus mean and test-n-weighted mean over hospitals.
+        `value(m, c)` returns (point, (B,) samples) for metric k."""
+        rows = [(name(c), {m: value(m, c) for m in bmethods}) for c in clients]
+        w = np.array([n_test[c] for c in clients], float)
+        for label, wts in [("mean over hospitals", np.ones_like(w)),
+                           ("weighted by test n", w)]:
+            agg = {}
+            for m in bmethods:
+                pts, smp = zip(*(value(m, c) for c in clients))
+                agg[m] = (np.average(pts, weights=wts),
+                          np.average(np.stack(smp), axis=0, weights=wts))
+            rows.append((label, agg))
+        return rows
+
+    lines += ["", "## 95% confidence intervals (bootstrap over test patients)", "",
+              f"Each hospital's test patients resampled with replacement, {B} times, keeping",
+              "its label counts; scores averaged over seeds. Unlike the ± above, the interval",
+              "shows how much a score could move with a different draw of test patients.", ""]
+    for k in metrics:
+        lines += [f"{LABELS[k][0].upper()}{LABELS[k][1:]}:", ""]
+        rows = rows_for(k, lambda m, c: boot[m][c][k])
+        lines += table(["hospital"] + bmethods,
+                       [[r] + ["{:.3f} [{:.3f}, {:.3f}]".format(v[m][0], *ci(v[m][1]))
+                               for m in bmethods] for r, v in rows]) + [""]
+
+    if "fedavg" in bmethods and len(bmethods) > 1:
+        others = [m for m in bmethods if m != "fedavg"]
+        lines += ["## FedAvg minus each other method (paired bootstrap)", "",
+                  "`*` marks a difference whose 95% interval excludes 0. Without a `*`, the",
+                  "test sets are too small to say which method is better there.", ""]
+        for k in metrics:
+            lines += [f"{LABELS[k][0].upper()}{LABELS[k][1:]}:", ""]
+            rows = []
+            for r, v in rows_for(k, lambda m, c: boot[m][c][k]):
+                cells = []
+                for o in others:
+                    lo, hi = ci(v["fedavg"][1] - v[o][1])
+                    star = "*" if lo > 0 or hi < 0 else " "
+                    cells.append(f"{v['fedavg'][0] - v[o][0]:+.3f} [{lo:+.3f}, {hi:+.3f}]{star}")
+                rows.append([r] + cells)
+            lines += table(["hospital"] + [f"fedavg − {o}" for o in others], rows) + [""]
 
 if balance:
     lines += ["", "## Data caveats", ""]
@@ -112,6 +256,19 @@ if balance:
             lines.append(
                 f"- {name(c)}: only {balance[c]['n_test']} test patients, so its accuracy "
                 f"moves in steps of {1 / balance[c]['n_test']:.3f}.")
+    for c in mean.index:
+        n0, n1 = balance[c]["n_test_0"], balance[c]["n_test_1"]
+        if len(metrics) > 1 and 0 < min(n0, n1) < 5:
+            rare = min(n0, n1)
+            lines.append(
+                f"- {name(c)}: the test set has {n0} patient(s) with label 0 and {n1} with "
+                f"label 1. Half of its balanced accuracy rests on the {rare} rarer one(s), and "
+                f"its AUC on {n0 * n1} label-0/label-1 pairs (steps of {1 / (n0 * n1):.3f}).")
+            if preds is not None:
+                lines.append(
+                    f"- {name(c)}: the bootstrap keeps label counts fixed, so every resample "
+                    f"contains the same {rare} rarer patient(s). Its intervals understate the "
+                    f"real uncertainty; don't draw conclusions from this hospital alone.")
 
 # ---------- what was run, read back from the log so it can't go stale
 def values(g, col):
@@ -132,26 +289,34 @@ print(out)
 with open("results/summary.md", "w") as f:
     f.write(out + "\n")
 
-# ---------- curves: mean accuracy over hospitals, averaged over seeds
+# ---------- curves: mean over hospitals, averaged over seeds
 fed = hospitals[hospitals["round"] >= 0]
-curves = fed.groupby(["method", "seed", "round", "bytes_uploaded"])["accuracy"].mean() \
-            .groupby(["method", "round", "bytes_uploaded"]).mean().reset_index()
+plots = [("accuracy", "round", "server round"),
+         ("accuracy", "bytes_uploaded", "total bytes uploaded")] + \
+        [(k, "round", "server round") for k in metrics[1:]]
 
-for x, fname, label in [("round", "accuracy_vs_round.png", "server round"),
-                        ("bytes_uploaded", "accuracy_vs_bytes.png", "total bytes uploaded")]:
+for k, x, label in plots:
+    curves = fed.groupby(["method", "seed", "round", "bytes_uploaded"])[k].mean() \
+                .groupby(["method", "round", "bytes_uploaded"]).mean().reset_index()
     fig, ax = plt.subplots(figsize=(6, 4))
     for m, g in curves.groupby("method"):
-        ax.plot(g[x], g["accuracy"], label=m)
+        ax.plot(g[x], g[k], label=m)
     for m, style in [("pooled", "--"), ("local", ":")]:
-        if m in mean.columns:
-            ax.axhline(mean[m].mean(), linestyle=style, color="grey", label=f"{m} (final)")
-    if balance:  # a curve below this line is worse than guessing the common label
+        if m in means[k].columns:
+            ax.axhline(means[k][m].mean(), linestyle=style, color="grey",
+                       label=f"{m} (final)")
+    # a curve below this line is no better than always saying one label
+    if k != "accuracy":
+        ax.axhline(0.5, linestyle="-.", color="firebrick", label="chance")
+    elif balance:
         ax.axhline(base.mean(), linestyle="-.", color="firebrick",
                    label="majority class")
     ax.set_xlabel(label)
-    ax.set_ylabel("mean test accuracy over hospitals")
+    ax.set_ylabel(f"mean test {LABELS[k]} over hospitals")
     ax.set_title("Fed-Heart-Disease")
     ax.legend()
     fig.tight_layout()
+    fname = f"{k}_vs_{'bytes' if x == 'bytes_uploaded' else x}.png"
     fig.savefig(f"results/{fname}", dpi=150)
+    plt.close(fig)
     print(f"saved results/{fname}")
