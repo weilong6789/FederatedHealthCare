@@ -2,10 +2,10 @@
 
 | hospital       | test n | majority class | local         | pooled        | fedavg        |
 |----------------|--------|----------------|---------------|---------------|---------------|
-| 0 Cleveland    | 104    | 0.538          | 0.737 ± 0.005 | 0.773 ± 0.005 | 0.790 ± 0.008 |
-| 1 Hungary      | 89     | 0.629          | 0.742 ± 0.008 | 0.764 ± 0.000 | 0.775 ± 0.008 |
+| 0 Cleveland    | 104    | 0.538          | 0.737 ± 0.005 | 0.777 ± 0.004 | 0.790 ± 0.008 |
+| 1 Hungary      | 89     | 0.629          | 0.742 ± 0.008 | 0.769 ± 0.006 | 0.775 ± 0.008 |
 | 2 Switzerland  | 16     | 0.938          | 0.938 ± 0.000 | 0.750 ± 0.000 | 0.688 ± 0.000 |
-| 3 Long Beach V | 45     | 0.778          | 0.724 ± 0.025 | 0.667 ± 0.000 | 0.560 ± 0.010 |
+| 3 Long Beach V | 45     | 0.778          | 0.724 ± 0.025 | 0.658 ± 0.012 | 0.560 ± 0.010 |
 
 `majority class` is the accuracy of always predicting that hospital's more
 common label. A method at or below it has learned nothing useful there.
@@ -14,17 +14,17 @@ common label. A method at or below it has learned nothing useful there.
 
 | hospital       | local  | pooled | fedavg |
 |----------------|--------|--------|--------|
-| 0 Cleveland    | +0.198 | +0.235 | +0.252 |
-| 1 Hungary      | +0.112 | +0.135 | +0.146 |
+| 0 Cleveland    | +0.198 | +0.238 | +0.252 |
+| 1 Hungary      | +0.112 | +0.139 | +0.146 |
 | 2 Switzerland  | +0.000 | -0.188 | -0.250 |
-| 3 Long Beach V | -0.053 | -0.111 | -0.218 |
+| 3 Long Beach V | -0.053 | -0.120 | -0.218 |
 
 ## Summary
 
 | method | mean over hospitals | weighted by test n | worst hospital | mean lift over baseline | hospitals beaten |
 |--------|---------------------|--------------------|----------------|-------------------------|------------------|
 | local  | 0.785               | 0.749              | 0.724          | +0.064                  | 2 of 4           |
-| pooled | 0.738               | 0.750              | 0.667          | +0.018                  | 2 of 4           |
+| pooled | 0.738               | 0.751              | 0.658          | +0.018                  | 2 of 4           |
 | fedavg | 0.703               | 0.738              | 0.560          | -0.017                  | 2 of 4           |
 
 `mean over hospitals` weights every hospital equally, so hospital 2 (16 test
