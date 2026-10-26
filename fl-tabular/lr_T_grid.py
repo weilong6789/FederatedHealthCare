@@ -29,7 +29,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from fltab.harness import (METRICS, ROOT, eval_loaders, evaluate, fedavg_steps,
+from fltab.harness import (METRICS, ROOT, all_patients_test, evaluate, fedavg_steps,
                            pooled_steps, steps_per_pooled_epoch)
 
 p = argparse.ArgumentParser()
@@ -42,7 +42,7 @@ args = p.parse_args()
 OUT = ROOT / "results"
 OUT.mkdir(exist_ok=True)
 TOTAL = args.epochs * steps_per_pooled_epoch()
-TEST = eval_loaders("test")["pooled"]
+TEST = all_patients_test()
 LABELS = {"accuracy": "accuracy", "balanced_accuracy": "balanced accuracy", "auc": "AUC"}
 
 rows = []
