@@ -22,8 +22,10 @@ Writes:
     results/local_steps_tradeoff.png      final score and rounds needed vs T
     results/local_steps.md                the table behind the tradeoff plot
 
-Scores are on all 254 test patients together (the "pooled" test set), so one
-patient counts the same at every hospital.
+Scores are on all 254 test patients together, so one patient counts the same
+at every hospital. Pooled and FedAvg both train and test on features scaled
+per hospital (FLamby's per-center scaling), so they see the same inputs; see
+pooled_steps in fltab/harness.py.
 """
 import argparse
 import csv
@@ -35,7 +37,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from fltab.harness import (METRICS, ROOT, eval_loaders, evaluate, fedavg_steps,
+from fltab.harness import (METRICS, ROOT, all_patients_test, evaluate, fedavg_steps,
                            pooled_steps, steps_per_pooled_epoch)
 
 p = argparse.ArgumentParser()
@@ -53,7 +55,7 @@ OUT.mkdir(exist_ok=True)
 STEPS_PER_EPOCH = steps_per_pooled_epoch()
 TOTAL = args.epochs * STEPS_PER_EPOCH
 EVAL_EVERY = max(1, round(args.eval_every * STEPS_PER_EPOCH))
-TEST = eval_loaders("test")["pooled"]
+TEST = all_patients_test()
 LABELS = {"accuracy": "accuracy", "balanced_accuracy": "balanced accuracy", "auc": "AUC"}
 
 rows = []

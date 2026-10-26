@@ -129,6 +129,13 @@ pooled SGD with a bigger batch; larger T lets each hospital drift toward its
 own data between averages but needs far fewer rounds. Same lr for every run
 (`--lr`, default 0.003), so T is the only thing that changes.
 
+Pooled here is not quite `baselines.py`'s pooled. FLamby scales features with
+each hospital's own mean/std, but with `pooled=True` it uses all hospitals'
+statistics instead; FedAvg can only use the per-hospital version. So for this
+comparison pooled trains on the four per-hospital datasets concatenated, and
+both are scored on the 254 test patients scaled per hospital
+(`pooled_steps` and `all_patients_test` in `fltab/harness.py`).
+
 Outputs in `results/`: `local_steps_curve_<metric>.png` (score vs epochs, one
 line per T, pooled dashed), `local_steps_rounds_<metric>.png` (score vs
 communication rounds), `local_steps_tradeoff.png` (final score and rounds

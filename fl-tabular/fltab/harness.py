@@ -16,7 +16,7 @@ import numpy as np
 import torch
 from sklearn.metrics import balanced_accuracy_score, roc_auc_score
 from sklearn.model_selection import train_test_split
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import ConcatDataset, DataLoader, Subset
 from flamby.datasets.fed_heart_disease import (
     BATCH_SIZE,
     NUM_CLIENTS,
@@ -143,12 +143,30 @@ def train_steps(model, batch_iter, lr, steps):
     return model
 
 
+# FLamby scales each patient's features with their own hospital's training
+# mean/std, except with pooled=True, which uses all hospitals' training data
+# together. FedAvg can only ever see the per-hospital version. To compare
+# FedAvg with pooled on the same inputs, pooled_steps trains on the four
+# per-hospital datasets concatenated, and both are scored on
+# all_patients_test(): the 254 test patients, each scaled by their hospital.
+@lru_cache(maxsize=None)
+def _all_patients(train):
+    return ConcatDataset([_dataset(i, False, train) for i in range(NUM_CLIENTS)])
+
+
+def all_patients_test():
+    """All 254 test patients, each scaled with their own hospital's statistics."""
+    return DataLoader(_all_patients(False), batch_size=BATCH_SIZE)
+
+
 def pooled_steps(seed, lr, total, eval_every=None, on_eval=None):
-    """Pooled SGD for `total` minibatch steps. Calls on_eval(round=0, steps, model)
-    at step 0, every `eval_every` steps and at the end."""
+    """Pooled SGD for `total` minibatch steps on all hospitals' training data,
+    scaled per hospital (see above). Calls on_eval(round=0, steps, model) at
+    step 0, every `eval_every` steps and at the end."""
     set_seed(seed)
     model = make_model()
-    it = batches(train_loader(pooled=True, seed=seed))
+    it = batches(DataLoader(_all_patients(True), batch_size=BATCH_SIZE, shuffle=True,
+                            generator=torch.Generator().manual_seed(seed)))
     if on_eval:
         on_eval(0, 0, model)
     done, chunk = 0, eval_every or total
@@ -194,7 +212,7 @@ def fedavg_steps(seed, T, lr, total, eval_every=None, on_eval=None):
 
 def steps_per_pooled_epoch():
     """SGD steps in one pass over the pooled training data (122 at batch 4)."""
-    return -(-len(_dataset(None, True, True)) // BATCH_SIZE)
+    return -(-len(_all_patients(True)) // BATCH_SIZE)
 
 
 # ---------------------------------------------------------------- evaluation
