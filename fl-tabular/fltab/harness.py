@@ -123,6 +123,26 @@ def train_sgd(model, loader, lr, epochs):
     return model
 
 
+def batches(loader):
+    """Endless minibatches from `loader`, reshuffled at every pass."""
+    while True:
+        yield from loader
+
+
+def train_steps(model, batch_iter, lr, steps):
+    """Plain SGD for a fixed number of minibatch steps (not epochs), drawing
+    from `batch_iter` (see `batches`). Same optimizer and loss as train_sgd."""
+    opt = torch.optim.SGD(model.parameters(), lr=lr)
+    loss_fn = BaselineLoss()
+    model.train()
+    for _ in range(steps):
+        xb, yb = next(batch_iter)
+        opt.zero_grad()
+        loss_fn(model(xb), yb).backward()
+        opt.step()
+    return model
+
+
 # ---------------------------------------------------------------- evaluation
 @torch.no_grad()
 def predict(model, loader):
