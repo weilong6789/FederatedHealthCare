@@ -35,9 +35,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from fltab.harness import (BATCH_SIZE, METRICS, NUM_CLIENTS, ROOT, batches,
-                           eval_loaders, evaluate, make_model, set_seed,
-                           train_loader, train_steps)
+from fltab.harness import (METRICS, ROOT, eval_loaders, evaluate, fedavg_steps,
+                           pooled_steps, steps_per_pooled_epoch)
 
 p = argparse.ArgumentParser()
 p.add_argument("--Ts", type=int, nargs="+", default=[1, 2, 5, 10, 25, 50, 100, 250],
@@ -51,7 +50,7 @@ args = p.parse_args()
 
 OUT = ROOT / "results"
 OUT.mkdir(exist_ok=True)
-STEPS_PER_EPOCH = math.ceil(len(train_loader(pooled=True).dataset) / BATCH_SIZE)
+STEPS_PER_EPOCH = steps_per_pooled_epoch()
 TOTAL = args.epochs * STEPS_PER_EPOCH
 EVAL_EVERY = max(1, round(args.eval_every * STEPS_PER_EPOCH))
 TEST = eval_loaders("test")["pooled"]
@@ -60,53 +59,18 @@ LABELS = {"accuracy": "accuracy", "balanced_accuracy": "balanced accuracy", "auc
 rows = []
 
 
-def record(method, T, seed, round_, steps, model):
-    scores = evaluate(model, TEST)
-    rows.append({"method": method, "T": T, "seed": seed, "round": round_,
-                 "steps": steps, "epochs": steps / STEPS_PER_EPOCH, **scores})
-
-
-def run_pooled(seed):
-    set_seed(seed)
-    model = make_model()
-    it = batches(train_loader(pooled=True, seed=seed))
-    record("pooled", 0, seed, 0, 0, model)
-    done = 0
-    while done < TOTAL:
-        n = min(EVAL_EVERY, TOTAL - done)
-        train_steps(model, it, args.lr, n)
-        done += n
-        record("pooled", 0, seed, 0, done, model)
-
-
-def run_fedavg(seed, T):
-    set_seed(seed)                                   # same initial model as pooled
-    model = make_model()
-    loaders = [train_loader(center=i, seed=seed * 1000 + i) for i in range(NUM_CLIENTS)]
-    its = [batches(dl) for dl in loaders]            # each hospital keeps its place
-    sizes = [len(dl.dataset) for dl in loaders]
-    rounds = math.ceil(TOTAL / T)
-    record("fedavg", T, seed, 0, 0, model)
-    next_eval = EVAL_EVERY
-    for r in range(1, rounds + 1):
-        states = []
-        for it in its:
-            local = make_model()
-            local.load_state_dict(model.state_dict())
-            train_steps(local, it, args.lr, T)
-            states.append(local.state_dict())
-        model.load_state_dict({k: sum(s[k] * n for s, n in zip(states, sizes)) / sum(sizes)
-                               for k in states[0]})
-        steps = r * T
-        if steps >= next_eval or r == rounds:
-            record("fedavg", T, seed, r, steps, model)
-            next_eval = (steps // EVAL_EVERY + 1) * EVAL_EVERY
+def recorder(method, T, seed):
+    def record(round_, steps, model):
+        rows.append({"method": method, "T": T, "seed": seed, "round": round_,
+                     "steps": steps, "epochs": steps / STEPS_PER_EPOCH,
+                     **evaluate(model, TEST)})
+    return record
 
 
 for seed in args.seeds:
-    run_pooled(seed)
+    pooled_steps(seed, args.lr, TOTAL, EVAL_EVERY, recorder("pooled", 0, seed))
     for T in args.Ts:
-        run_fedavg(seed, T)
+        fedavg_steps(seed, T, args.lr, TOTAL, EVAL_EVERY, recorder("fedavg", T, seed))
     print(f"seed {seed} done")
 
 with open(OUT / "local_steps.csv", "w", newline="") as f:

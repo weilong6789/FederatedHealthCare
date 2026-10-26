@@ -104,6 +104,7 @@ under `[tool.flwr.app.config]`): `num-server-rounds`, `local-epochs`, `lr`,
 | `fltab/server_app.py` | coordinator: hand out weights, average what comes back, evaluate, repeat |
 | `baselines.py` | the `pooled` and `local` comparisons. No Flower. |
 | `local_steps.py` | FedAvg with T local SGD steps per round vs pooled, same step budget |
+| `lr_T_grid.py` | FedAvg − pooled over a learning rate × T grid |
 | `OPACUS_HANDOFF.md` | where DP-SGD (Opacus) plugs into this code |
 | `tune.py` | picks each method's learning rate (and FedAvg's local epochs) on a validation split |
 | `summarize.py` | turns `results/results.csv` into `results/summary.md` and plots per metric |
@@ -134,6 +135,18 @@ communication rounds), `local_steps_tradeoff.png` (final score and rounds
 needed vs T), `local_steps.md` (table) and `local_steps.csv` (raw).
 Try `--lr 0.1` too: drift grows with lr × T, so a large lr is where a gap
 from pooled would show first.
+
+### Learning rate × T grid
+
+```bash
+python lr_T_grid.py        # lr 0.003-1.0 × T 1-500, 20 epochs, seeds 0-2 (~30 min)
+```
+
+Heatmap of FedAvg's final score minus pooled's, same lr and step budget in
+each cell (`results/lr_T_grid_<metric>.png`, table in `lr_T_grid.md`). Drift
+grows with lr × T, so this shows where "FedAvg ≈ pooled" stops holding. The
+table also lists pooled's own score per lr, since a very large lr can break
+pooled too.
 
 ## Confidence intervals
 
