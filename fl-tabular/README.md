@@ -140,6 +140,10 @@ Outputs in `results/`: `local_steps_curve_<metric>.png` (score vs epochs, one
 line per T, pooled dashed), `local_steps_rounds_<metric>.png` (score vs
 communication rounds), `local_steps_tradeoff.png` (final score and rounds
 needed vs T), `local_steps.md` (table) and `local_steps.csv` (raw).
+Each final model is also scored on every hospital's own test set
+(`local_steps_hospitals.png`, `local_steps_hospitals.csv`, tables at the end
+of `local_steps.md`), to check whether a large T leaves one hospital behind
+even when the overall score holds.
 Try `--lr 0.1` too: drift grows with lr × T, so a large lr is where a gap
 from pooled would show first.
 
