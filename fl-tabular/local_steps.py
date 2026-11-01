@@ -37,8 +37,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from fltab.harness import (METRICS, ROOT, all_patients_test, evaluate, fedavg_steps,
-                           pooled_steps, steps_per_pooled_epoch)
+from fltab.harness import (METRICS, NUM_CLIENTS, ROOT, all_patients_test, eval_loaders,
+                           evaluate, fedavg_steps, pooled_steps, steps_per_pooled_epoch)
 
 p = argparse.ArgumentParser()
 p.add_argument("--Ts", type=int, nargs="+", default=[1, 2, 5, 10, 25, 50, 100, 250],
@@ -57,8 +57,12 @@ TOTAL = args.epochs * STEPS_PER_EPOCH
 EVAL_EVERY = max(1, round(args.eval_every * STEPS_PER_EPOCH))
 TEST = all_patients_test()
 LABELS = {"accuracy": "accuracy", "balanced_accuracy": "balanced accuracy", "auc": "AUC"}
+# Each hospital's own test set, scaled with its own statistics like everything else here
+HOSPITALS = ["Cleveland", "Hungary", "Switzerland", "Long Beach VA"]
+HOSP_TEST = {str(i): eval_loaders("test")[str(i)] for i in range(NUM_CLIENTS)}
 
 rows = []
+hosp_rows = []        # final model only, scored at each hospital
 
 
 def recorder(method, T, seed):
@@ -66,6 +70,10 @@ def recorder(method, T, seed):
         rows.append({"method": method, "T": T, "seed": seed, "round": round_,
                      "steps": steps, "epochs": steps / STEPS_PER_EPOCH,
                      **evaluate(model, TEST)})
+        if steps >= TOTAL:
+            for c, dl in HOSP_TEST.items():
+                hosp_rows.append({"method": method, "T": T, "seed": seed, "client": c,
+                                  "hospital": HOSPITALS[int(c)], **evaluate(model, dl)})
     return record
 
 
@@ -79,6 +87,10 @@ with open(OUT / "local_steps.csv", "w", newline="") as f:
     w = csv.DictWriter(f, fieldnames=rows[0].keys())
     w.writeheader()
     w.writerows(rows)
+with open(OUT / "local_steps_hospitals.csv", "w", newline="") as f:
+    w = csv.DictWriter(f, fieldnames=hosp_rows[0].keys())
+    w.writeheader()
+    w.writerows(hosp_rows)
 
 # ---------------------------------------------------------------- plots
 df = pd.DataFrame(rows)
@@ -167,5 +179,38 @@ lines.append("| pooled | - | " + " | ".join(cell(("pooled", 0), k) for k in METR
 for T in Ts:
     lines.append(f"| FedAvg T={T} | {math.ceil(TOTAL / T)} | "
                  + " | ".join(cell(("fedavg", T), k) for k in METRICS) + " |")
+# ---------------------------------------------------------------- per hospital
+# Does a large T leave one hospital behind even when the overall score holds?
+hdf = pd.DataFrame(hosp_rows)
+hagg = hdf.groupby(["hospital", "method", "T"])[METRICS].mean()
+names = [h for h in HOSPITALS if h in hdf["hospital"].unique()]
+hcolor = {h: plt.get_cmap("tab10")(i) for i, h in enumerate(names)}
+
+fig, axes = plt.subplots(1, len(METRICS), figsize=(4.5 * len(METRICS), 4))
+for ax, k in zip(axes, METRICS):
+    for h in names:
+        ax.plot(Ts, [hagg.loc[(h, "fedavg", T), k] for T in Ts], marker="o",
+                color=hcolor[h], label=h)
+        ax.axhline(hagg.loc[(h, "pooled", 0), k], color=hcolor[h], linestyle="--", alpha=0.6)
+    ax.set_xscale("log")
+    ax.set_xlabel("T, local SGD steps per round")
+    ax.set_ylabel(f"final test {LABELS[k]}, that hospital")
+    ax.set_title(LABELS[k])
+axes[0].legend(fontsize=8)
+fig.suptitle(f"Each hospital's own test set: FedAvg (lines) vs pooled (dashed), "
+             f"lr {args.lr}, mean of {len(args.seeds)} seeds")
+fig.tight_layout()
+fig.savefig(OUT / "local_steps_hospitals.png", dpi=150)
+plt.close(fig)
+
+for k in METRICS:
+    lines += ["", f"Final test {LABELS[k]} at each hospital, mean over seeds:", "",
+              "| hospital | pooled | " + " | ".join(f"T={T}" for T in Ts) + " |",
+              "|---|---|" + "---|" * len(Ts)]
+    for h in names:
+        lines.append(f"| {h} | {hagg.loc[(h, 'pooled', 0), k]:.3f} | "
+                     + " | ".join(f"{hagg.loc[(h, 'fedavg', T), k]:.3f}" for T in Ts) + " |")
+lines += ["", "Switzerland has 16 test patients, one of them label 0, so its accuracy moves "
+          "in steps of 0.062 and its AUC rests on that one patient. Long Beach VA has 45."]
 (OUT / "local_steps.md").write_text("\n".join(lines) + "\n")
 print("\n".join(lines))
