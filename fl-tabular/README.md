@@ -176,6 +176,8 @@ difference whose interval contains 0 is not evidence that one method is better.
 
 ## Where this goes next
 
+Full plan with phases, deliverables and exit checks: `ROADMAP.md`.
+
 The point of these baselines is differential privacy, which is not in the
 code yet:
 
