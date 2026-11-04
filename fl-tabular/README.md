@@ -105,6 +105,7 @@ under `[tool.flwr.app.config]`): `num-server-rounds`, `local-epochs`, `lr`,
 | `baselines.py` | the `pooled` and `local` comparisons. No Flower. |
 | `local_steps.py` | FedAvg with T local SGD steps per round vs pooled, same step budget |
 | `lr_T_grid.py` | FedAvg − pooled over a learning rate × T grid |
+| `comm_budget.py` | rounds FedAvg needs to match pooled, and FedAvg vs pooled on short budgets, per T and lr |
 | `OPACUS_HANDOFF.md` | where DP-SGD (Opacus) plugs into this code |
 | `tune.py` | picks each method's learning rate (and FedAvg's local epochs) on a validation split |
 | `summarize.py` | turns `results/results.csv` into `results/summary.md` and plots per metric |
@@ -158,6 +159,32 @@ each cell (`results/lr_T_grid_<metric>.png`, table in `lr_T_grid.md`). Drift
 grows with lr × T, so this shows where "FedAvg ≈ pooled" stops holding. The
 table also lists pooled's own score per lr, since a very large lr can break
 pooled too.
+
+### Communication cost before convergence
+
+```bash
+python comm_budget.py      # lr 0.003-0.1 × T 1-250, seeds 0-4 (~20 min)
+```
+
+The 6100-step budget above is long enough for every T to converge to the same
+model (pooled peaks by about 10 epochs at lr 0.003), so its final scores can't
+show what T saves in communication. `comm_budget.py` looks at the part before
+convergence, for each lr in the range `tune.py` searched:
+
+- score after every round, one line per T, against pooled's converged score
+  (`comm_rounds_<metric>.png`)
+- rounds needed to get within 0.01 of pooled's converged score
+  (`comm_rounds_to_target.png`)
+- FedAvg minus pooled at the same SGD steps on short budgets (¼ to 4 epochs),
+  where neither has converged and drift would slow FedAvg down if it mattered
+  (`comm_steps_<metric>.png`, `comm_equal_steps_<metric>.png`)
+
+Tables in `results/comm_budget.md`, raw scores in `results/comm_budget.csv`.
+
+![rounds to target](results/comm_rounds_to_target.png)
+![AUC vs rounds](results/comm_rounds_auc.png)
+![AUC vs SGD steps, short budgets](results/comm_steps_auc.png)
+![FedAvg minus pooled at equal steps](results/comm_equal_steps_auc.png)
 
 ## Confidence intervals
 
