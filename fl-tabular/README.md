@@ -181,6 +181,16 @@ convergence, for each lr in the range `tune.py` searched:
 
 Tables in `results/comm_budget.md`, raw scores in `results/comm_budget.csv`.
 
+What it showed (lr 0.003-0.1, seeds 0-4): rounds × T needed to reach pooled's
+score is constant for each lr (about 670 SGD steps at lr 0.003, 15-30 at lr
+0.1), so rounds needed fall as exactly 1/T, all the way to T = 250 (3 rounds
+at lr 0.003, 1 round at lr ≥ 0.01). At the same SGD steps, FedAvg tracks
+pooled within ±0.01 AUC even at ¼ epoch, before anything has converged. So
+local drift doesn't slow training here at any lr or T tested: with 14
+parameters and per-hospital scaling, the hospitals' losses are similar enough
+that more local steps are free. A gap would need harder heterogeneity (a
+bigger model, unscaled features, or label skew).
+
 ![rounds to target](results/comm_rounds_to_target.png)
 ![AUC vs rounds](results/comm_rounds_auc.png)
 ![AUC vs SGD steps, short budgets](results/comm_steps_auc.png)
