@@ -107,7 +107,9 @@ all test images vs epochs). `results/` is tracked by git; smoke-test folders
 On all 4650 test images, FedAvg's balanced accuracy is 0.684 against pooled's
 0.748: −0.064, 95% CI [−0.081, −0.047]. Unlike Fed-Heart-Disease, FedAvg
 falls clearly behind here, and the gap holds from epoch 3 to the end. Plain
-accuracy hides it (FedAvg is +0.009), because the common classes carry
-accuracy and FedAvg gives up the rare ones. FedAvg does worst at hospitals 3
-and 4, whose label mixes are furthest from hospital 0's, which dominates the
-weighted average. Full tables in `results/summary.md`.
+accuracy hides it (FedAvg is +0.009): FedAvg leans toward class 1, the most
+common class and 84–94% of the images at hospitals 1 and 5. Its class-1
+recall is 0.94 against pooled's 0.84, while it drops 6–19 points on classes
+0, 2, 3 and 7. So it does worst at hospitals 3 and 4, which have the fewest
+class-1 images (34% and 40%), and best at hospital 5. Full tables in
+`results/summary.md`.
