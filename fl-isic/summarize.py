@@ -131,6 +131,64 @@ for m, name in METRICS.items():
     fig.savefig(OUT / f"isic_curve_{m}.png", dpi=150)
     plt.close(fig)
 
+# ---------------------------------------------------------------- still improving?
+# Straight-line fit to each seed's score over epochs 10-20; the slope says how
+# much a run was still gaining when training stopped.
+LATE = 10
+COLORS = {"pooled": "#2a78d6"}                    # fixed order: pooled blue, FedAvg orange
+for r in RUNS:
+    if r.startswith("fedavg"):
+        COLORS[r] = "#eb6834"
+curve_runs = [r for r in RUNS if r != "local"]
+lines.append("## Still improving at epoch 20? (all test images)\n")
+lines.append(f"Final score, and the gain per 10 epochs from a straight-line fit to each "
+             f"seed's scores over epochs {LATE}-20 (mean over seeds; `n/3 up` counts seeds "
+             f"with a positive slope).\n")
+rows, slopes = [], {}
+for r in curve_runs:
+    a = d[(d.run == r) & (d.client == "all")]
+    fin = final[(final.run == r) & (final.client == "all")]
+    for m, name in METRICS.items():
+        sl = [np.polyfit(s.epochs, s[m], 1)[0] for _, s in a[a.epochs >= LATE].groupby("seed")]
+        slopes[(r, m)] = np.mean(sl)
+        rows.append([r, name, f"{fin[m].mean():.3f} ± {fin[m].std():.3f}",
+                     f"{10 * np.mean(sl):+.3f}", f"{sum(s > 0 for s in sl)}/{len(sl)} up"])
+table(["run", "metric", "final", "gain per 10 epochs", "seeds rising"], rows)
+
+fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+for ax, m in zip(axes, ["accuracy", "balanced_accuracy"]):
+    for r in curve_runs:
+        a = d[(d.run == r) & (d.client == "all")].copy()
+        a["ep"] = a.epochs.round(0)
+        g = a.groupby("ep")[m].agg(["mean", "std"])
+        g = g[g.index >= 1]                           # epoch 0 is the untrained model
+        c = COLORS[r]
+        ax.fill_between(g.index, g["mean"] - g["std"], g["mean"] + g["std"],
+                        color=c, alpha=0.15, lw=0)
+        ax.plot(g.index, g["mean"], color=c, lw=2, label=r)
+        late = a[a.epochs >= LATE]
+        k, b = np.polyfit(late.epochs, late[m], 1)
+        xs = np.array([LATE, late.epochs.max()])
+        ax.plot(xs, k * xs + b, color=c, lw=1.5, ls=(0, (4, 3)))
+        ax.annotate(f"{r}: {10 * k:+.3f} / 10 ep", (xs[1], k * xs[1] + b),
+                    xytext=(6, 0), textcoords="offset points", va="center",
+                    fontsize=9, color="#52514e")
+    ax.axvspan(LATE, 20.3, color="#000000", alpha=0.04, lw=0)
+    ax.set_title(f"test {METRICS[m]}, all 4650 images", fontsize=11, loc="left")
+    ax.set_xlabel("pooled-equivalent epochs")
+    ax.set_xlim(0.5, 27)
+    ax.set_xticks(range(0, 21, 5))
+    ax.grid(alpha=0.25, lw=0.6)
+    for s in ["top", "right"]:
+        ax.spines[s].set_visible(False)
+axes[0].legend(loc="lower right", frameon=False)
+fig.text(0.01, 0.01, f"Lines: mean over seeds, band ± 1 std. Dashed: straight-line fit over "
+         f"epochs {LATE}-20 (shaded), labelled with its gain per 10 epochs.",
+         fontsize=8.5, color="#52514e")
+fig.tight_layout(rect=(0, 0.04, 1, 1))
+fig.savefig(OUT / "isic_trend.png", dpi=200)
+plt.close(fig)
+
 # ---------------------------------------------------------------- settings
 lines.append("## Run settings\n")
 s = d.groupby("run").agg(seeds=("seed", lambda x: ", ".join(map(str, sorted(x.unique())))),

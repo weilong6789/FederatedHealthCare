@@ -61,6 +61,19 @@ Test images resampled with replacement within each hospital, 1000 times; both me
 | fedavg T=100 | accuracy | +0.009 [-0.001, +0.018] |
 | fedavg T=100 | AUC | -0.007 [-0.011, -0.004]* |
 
+## Still improving at epoch 20? (all test images)
+
+Final score, and the gain per 10 epochs from a straight-line fit to each seed's scores over epochs 10-20 (mean over seeds; `n/3 up` counts seeds with a positive slope).
+
+| run | metric | final | gain per 10 epochs | seeds rising |
+|---|---|---|---|---|
+| pooled | balanced accuracy | 0.748 ± 0.006 | +0.025 | 2/3 up |
+| pooled | accuracy | 0.771 ± 0.020 | +0.040 | 3/3 up |
+| pooled | AUC | 0.962 ± 0.003 | +0.009 | 3/3 up |
+| fedavg T=100 | balanced accuracy | 0.684 ± 0.006 | +0.007 | 2/3 up |
+| fedavg T=100 | accuracy | 0.780 ± 0.004 | +0.022 | 3/3 up |
+| fedavg T=100 | AUC | 0.955 ± 0.003 | +0.006 | 3/3 up |
+
 ## Run settings
 
 | run | seeds | optimizer | lr | epochs | longest run (min) |
