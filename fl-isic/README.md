@@ -91,4 +91,25 @@ metric for ISIC, the mean recall over the 8 classes), `accuracy`, and `auc`
 measure of the common classes; read balanced accuracy first.
 
 `results/isic_predictions.csv`: the final model's 8 class probabilities for
-every test image, for bootstrap intervals later.
+every test image.
+
+```bash
+python summarize.py     # about 2 minutes, runs on a laptop too
+```
+
+builds `results/summary.md` (tables, label mix per hospital, paired bootstrap
+interval for FedAvg − pooled) and `results/isic_curve_<metric>.png` (score on
+all test images vs epochs). `results/` is tracked by git; smoke-test folders
+(`results_*/`) and `logs/` are not.
+
+## First results (3 seeds, 20 epochs, FedAvg T = 100)
+
+On all 4650 test images, FedAvg's balanced accuracy is 0.684 against pooled's
+0.748: −0.064, 95% CI [−0.081, −0.047]. Unlike Fed-Heart-Disease, FedAvg
+falls clearly behind here, and the gap holds from epoch 3 to the end. Plain
+accuracy hides it (FedAvg is +0.009): FedAvg leans toward class 1, the most
+common class and 84–94% of the images at hospitals 1 and 5. Its class-1
+recall is 0.94 against pooled's 0.84, while it drops 6–19 points on classes
+0, 2, 3 and 7. So it does worst at hospitals 3 and 4, which have the fewest
+class-1 images (34% and 40%), and best at hospital 5. Full tables in
+`results/summary.md`.
