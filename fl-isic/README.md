@@ -90,6 +90,36 @@ python summarize.py results40
 
 The trend table then fits over epochs 20-40, the second half of training.
 
+### Sweep of T (local steps per round)
+
+`sweep_T.sh` submits FedAvg at 20 epochs for T = 1, 5, 20, 97, 291, 970 and
+5820, seeds 0-2, into `results/`, next to the pooled and T = 100 rows already
+there. Every T divides the 5820-step budget, so every run takes exactly the
+steps pooled does:
+
+| T | 1 | 5 | 20 | 97 | 291 | 970 | 5820 |
+|---|---|---|---|---|---|---|---|
+| rounds | 5820 | 1164 | 291 | 60 | 20 | 6 | 1 |
+
+T = 1 averages after every step; T = 5820 trains each hospital alone for the
+whole budget and averages once. Each hospital still gets a fresh Adam every
+round, as in the T = 100 runs. Time a short T = 1 run first: its 5820 rounds
+of copying and averaging weights come on top of the training, and every job
+must finish inside the 8-hour limit.
+
+```bash
+python isic.py --method fedavg --T 1 --epochs 0.5 --out results_smoke   # on a GPU node
+bash sweep_T.sh                          # 21 jobs
+TS="1 5" SEEDS="0" bash sweep_T.sh       # or a subset
+python summarize.py
+```
+
+With more than one T, `summarize.py` adds a table of final scores by T to
+`summary.md` and plots them against pooled in `results/isic_T_sweep.png`.
+Jobs lock the CSVs while appending, so runs finishing at once don't splice
+lines together. Expect `summarize.py` to take a few minutes per T: the
+bootstrap rescoring is the slow part.
+
 ## Budget
 
 One pooled epoch is 291 steps of batch 64, so the default 20 epochs is 5820
