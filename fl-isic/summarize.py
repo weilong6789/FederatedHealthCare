@@ -23,7 +23,15 @@ N_BOOT = 1000
 d = pd.read_csv(OUT / "isic.csv", dtype=str)
 d = d[d.method != "method"]          # header repeated by jobs that started together
 for c in ["seed", "round", "steps", "epochs", "n", "seconds", *METRICS]:
-    d[c] = pd.to_numeric(d[c])
+    d[c] = pd.to_numeric(d[c], errors="coerce")
+# Jobs appending at the same moment can splice two lines into one; drop those.
+ok = d.method.isin(["pooled", "fedavg", "local"]) & d.client.isin(CLIENTS + ["all"]) \
+    & d[["seed", "steps", "epochs", "n", *METRICS]].notna().all(axis=1)
+if (~ok).any():
+    print(f"skipping {(~ok).sum()} malformed rows of {OUT / 'isic.csv'}:")
+    print(d[~ok].to_string())
+d = d[ok].copy()
+d[["seed", "round", "steps", "n"]] = d[["seed", "round", "steps", "n"]].astype(int)
 d["run"] = d.method + np.where(d.method == "fedavg", " T=" + d["T"].fillna(""), "")
 d = d.drop_duplicates(["run", "seed", "steps", "client"], keep="last")
 final = d.loc[d.groupby(["run", "seed", "client"]).steps.idxmax()]
