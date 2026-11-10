@@ -27,10 +27,12 @@ Writes, under results/:
 """
 import argparse
 import csv
+import fcntl
 import os
 import random
 import time
 import warnings
+from contextlib import contextmanager
 from pathlib import Path
 
 import numpy as np
@@ -154,6 +156,22 @@ def scores(y, p):
             "auc": float(np.mean(aucs)) if aucs else float("nan"), "n": len(y)}
 
 
+@contextmanager
+def locked(path):
+    """Append to `path` holding an exclusive lock, so jobs running at once
+    don't splice their lines together. Falls back to an unlocked append on a
+    filesystem without locks; summarize.py drops any spliced rows."""
+    with open(path, "a", newline="") as f:
+        try:
+            fcntl.flock(f, fcntl.LOCK_EX)
+        except OSError:
+            pass
+        f.seek(0, os.SEEK_END)
+        yield f
+        f.flush()
+    # closing the file releases the lock
+
+
 FIELDS = ["method", "T", "seed", "round", "steps", "epochs", "client",
           "accuracy", "balanced_accuracy", "auc", "n", "lr", "opt", "seconds"]
 RESULTS = OUT / "isic.csv"
@@ -167,10 +185,9 @@ def log(model, round_, steps, epochs, hospitals=range(NUM_CLIENTS), final=False)
         y = np.concatenate([preds[i][0] for i in preds])
         pr = np.concatenate([preds[i][1] for i in preds])
         rows.append({"client": "all", **scores(y, pr)})
-    new = not RESULTS.exists()
-    with open(RESULTS, "a", newline="") as f:
+    with locked(RESULTS) as f:
         w = csv.DictWriter(f, FIELDS)
-        if new:
+        if f.tell() == 0:
             w.writeheader()
         for r in rows:
             w.writerow({"method": args.method, "T": args.T if args.method == "fedavg" else "",
@@ -182,7 +199,7 @@ def log(model, round_, steps, epochs, hospitals=range(NUM_CLIENTS), final=False)
           f"bal acc {last['balanced_accuracy']:.3f}  auc {last['auc']:.3f}  "
           f"({time.time() - T0:.0f}s)", flush=True)
     if final:
-        with open(OUT / "isic_predictions.csv", "a", newline="") as f:
+        with locked(OUT / "isic_predictions.csv") as f:
             w = csv.writer(f)
             if f.tell() == 0:
                 w.writerow(["method", "seed", "client", "image", "label",
