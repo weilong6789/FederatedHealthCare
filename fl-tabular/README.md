@@ -117,7 +117,7 @@ under `[tool.flwr.app.config]`): `num-server-rounds`, `local-epochs`, `lr`,
 ## Local steps T vs pooled
 
 ```bash
-python local_steps.py      # T = 1 2 5 10 25 50 100 250, 50 epochs, seeds 0-4 (~15 min)
+python local_steps.py      # T = 1 ... 6100, 50 epochs, seeds 0-4 (~20 min)
 ```
 
 FedAvg where each hospital takes T minibatch SGD steps per round (not
@@ -128,6 +128,19 @@ average is one SGD step on a gradient averaged over all hospitals, which is
 pooled SGD with a bigger batch; larger T lets each hospital drift toward its
 own data between averages but needs far fewer rounds. Same lr for every run
 (`--lr`, default 0.003), so T is the only thing that changes.
+
+The default sweep covers the two endpoints and 10 values between them, spaced
+evenly on a log scale. Each T divides the 6100-step budget, so every run takes
+exactly the same number of steps:
+
+| T | 1 | 2 | 5 | 10 | 25 | 50 | 122 | 244 | 610 | 1220 | 3050 | 6100 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| rounds | 6100 | 3050 | 1220 | 610 | 244 | 122 | 50 | 25 | 10 | 5 | 2 | 1 |
+
+T = 1 is pooled SGD with a bigger batch. T = 6100 is a single round: each
+hospital trains alone for the whole budget (Switzerland's 30 patients get about
+760 passes), and the server averages the four models once at the end. A
+different `--epochs` picks its own divisors; `--Ts` overrides the list.
 
 Pooled here is not quite `baselines.py`'s pooled. FLamby scales features with
 each hospital's own mean/std, but with `pooled=True` it uses all hospitals'

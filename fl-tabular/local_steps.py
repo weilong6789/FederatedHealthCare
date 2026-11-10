@@ -1,6 +1,6 @@
 """FedAvg with T local SGD steps per round, against pooled training.
 
-    python local_steps.py                  # T = 1 2 5 10 25 50 100 250, 50 epochs, seeds 0-4
+    python local_steps.py                  # T from 1 to the whole budget, 50 epochs, seeds 0-4
     python local_steps.py --Ts 1 10 100 --epochs 20 --seeds 0 1
 
 Each round, every hospital starts from the global model, takes T minibatch SGD
@@ -15,6 +15,12 @@ one epoch = the number of SGD steps one pass over the pooled training data
 takes (486 patients / batch 4 = 122 steps). FedAvg with T local steps runs
 budget / T rounds, so every T and pooled take the same number of SGD steps on
 the model. Same lr for every run, so T is the only thing that changes.
+
+By default the sweep runs between two endpoints: T = 1 (one step per round,
+as many rounds as steps) and T = the whole budget (a single round: every
+hospital trains alone for all of it, and the server averages once at the end).
+In between are about a dozen T values spaced evenly on a log scale, each a
+divisor of the budget so every run takes exactly the same number of steps.
 
 Writes:
     results/local_steps.csv               test scores along the way
@@ -41,8 +47,9 @@ from fltab.harness import (METRICS, NUM_CLIENTS, ROOT, all_patients_test, eval_l
                            evaluate, fedavg_steps, pooled_steps, steps_per_pooled_epoch)
 
 p = argparse.ArgumentParser()
-p.add_argument("--Ts", type=int, nargs="+", default=[1, 2, 5, 10, 25, 50, 100, 250],
-               help="local SGD steps per round")
+p.add_argument("--Ts", type=int, nargs="+",
+               help="local SGD steps per round (default: --n-T values from 1 to the whole budget)")
+p.add_argument("--n-T", type=int, default=12, help="how many T values in the default sweep")
 p.add_argument("--epochs", type=int, default=50, help="training budget, pooled-equivalent epochs")
 p.add_argument("--lr", type=float, default=0.003, help="same for every run (tuned pooled/FedAvg lr)")
 p.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2, 3, 4])
@@ -55,6 +62,23 @@ OUT.mkdir(exist_ok=True)
 STEPS_PER_EPOCH = steps_per_pooled_epoch()
 TOTAL = args.epochs * STEPS_PER_EPOCH
 EVAL_EVERY = max(1, round(args.eval_every * STEPS_PER_EPOCH))
+
+
+def default_Ts(total, n):
+    """About n divisors of `total`, log-spaced from 1 (total rounds) to total (1 round)."""
+    divisors = [d for d in range(1, total + 1) if total % d == 0]
+    picks = [min(divisors, key=lambda d: abs(math.log(d / t)))
+             for t in np.logspace(0, math.log10(total), n)]
+    return sorted(set(picks))
+
+
+if args.Ts is None:
+    args.Ts = default_Ts(TOTAL, args.n_T)
+uneven = [T for T in args.Ts if TOTAL % T]
+if uneven:
+    print(f"note: T = {uneven} don't divide {TOTAL}; those runs take ceil({TOTAL}/T) "
+          f"rounds, so slightly more steps than pooled")
+print(f"budget {TOTAL} steps; T = {args.Ts}; rounds = {[math.ceil(TOTAL / T) for T in args.Ts]}")
 TEST = all_patients_test()
 LABELS = {"accuracy": "accuracy", "balanced_accuracy": "balanced accuracy", "auc": "AUC"}
 # Each hospital's own test set, scaled with its own statistics like everything else here
