@@ -1,9 +1,11 @@
 """Tables and plots from results/isic.csv and results/isic_predictions.csv.
 
-    python summarize.py
+    python summarize.py              # reads and writes results/
+    python summarize.py results40    # same for another results folder
 
-Writes results/summary.md and results/isic_curve_<metric>.png.
+Writes <folder>/summary.md and <folder>/isic_curve_<metric>.png.
 """
+import sys
 from pathlib import Path
 
 import matplotlib
@@ -13,7 +15,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import balanced_accuracy_score, roc_auc_score
 
-OUT = Path("results")
+OUT = Path(sys.argv[1] if len(sys.argv) > 1 else "results")
 METRICS = {"balanced_accuracy": "balanced accuracy", "accuracy": "accuracy", "auc": "AUC"}
 CLIENTS = [str(i) for i in range(6)]
 N_BOOT = 1000
@@ -21,7 +23,15 @@ N_BOOT = 1000
 d = pd.read_csv(OUT / "isic.csv", dtype=str)
 d = d[d.method != "method"]          # header repeated by jobs that started together
 for c in ["seed", "round", "steps", "epochs", "n", "seconds", *METRICS]:
-    d[c] = pd.to_numeric(d[c])
+    d[c] = pd.to_numeric(d[c], errors="coerce")
+# Jobs appending at the same moment can splice two lines into one; drop those.
+ok = d.method.isin(["pooled", "fedavg", "local"]) & d.client.isin(CLIENTS + ["all"]) \
+    & d[["seed", "steps", "epochs", "n", *METRICS]].notna().all(axis=1)
+if (~ok).any():
+    print(f"skipping {(~ok).sum()} malformed rows of {OUT / 'isic.csv'}:")
+    print(d[~ok].to_string())
+d = d[ok].copy()
+d[["seed", "round", "steps", "n"]] = d[["seed", "round", "steps", "n"]].astype(int)
 d["run"] = d.method + np.where(d.method == "fedavg", " T=" + d["T"].fillna(""), "")
 d = d.drop_duplicates(["run", "seed", "steps", "client"], keep="last")
 final = d.loc[d.groupby(["run", "seed", "client"]).steps.idxmax()]
@@ -132,17 +142,18 @@ for m, name in METRICS.items():
     plt.close(fig)
 
 # ---------------------------------------------------------------- still improving?
-# Straight-line fit to each seed's score over epochs 10-20; the slope says how
-# much a run was still gaining when training stopped.
-LATE = 10
+# Straight-line fit to each seed's score over the second half of training; the
+# slope says how much a run was still gaining when training stopped.
+END = round(d.epochs.max())
+LATE = END / 2
 COLORS = {"pooled": "#2a78d6"}                    # fixed order: pooled blue, FedAvg orange
 for r in RUNS:
     if r.startswith("fedavg"):
         COLORS[r] = "#eb6834"
 curve_runs = [r for r in RUNS if r != "local"]
-lines.append("## Still improving at epoch 20? (all test images)\n")
+lines.append(f"## Still improving at epoch {END}? (all test images)\n")
 lines.append(f"Final score, and the gain per 10 epochs from a straight-line fit to each "
-             f"seed's scores over epochs {LATE}-20 (mean over seeds; `n/3 up` counts seeds "
+             f"seed's scores over epochs {LATE:g}-{END} (mean over seeds; `n/3 up` counts seeds "
              f"with a positive slope).\n")
 rows, slopes = [], {}
 for r in curve_runs:
@@ -173,17 +184,17 @@ for ax, m in zip(axes, ["accuracy", "balanced_accuracy"]):
         ax.annotate(f"{r}: {10 * k:+.3f} / 10 ep", (xs[1], k * xs[1] + b),
                     xytext=(6, 0), textcoords="offset points", va="center",
                     fontsize=9, color="#52514e")
-    ax.axvspan(LATE, 20.3, color="#000000", alpha=0.04, lw=0)
+    ax.axvspan(LATE, END + 0.3, color="#000000", alpha=0.04, lw=0)
     ax.set_title(f"test {METRICS[m]}, all 4650 images", fontsize=11, loc="left")
     ax.set_xlabel("pooled-equivalent epochs")
-    ax.set_xlim(0.5, 27)
-    ax.set_xticks(range(0, 21, 5))
+    ax.set_xlim(0.5, END * 1.35)
+    ax.set_xticks(range(0, END + 1, 5 if END <= 20 else 10))
     ax.grid(alpha=0.25, lw=0.6)
     for s in ["top", "right"]:
         ax.spines[s].set_visible(False)
 axes[0].legend(loc="lower right", frameon=False)
 fig.text(0.01, 0.01, f"Lines: mean over seeds, band ± 1 std. Dashed: straight-line fit over "
-         f"epochs {LATE}-20 (shaded), labelled with its gain per 10 epochs.",
+         f"epochs {LATE:g}-{END} (shaded), labelled with its gain per 10 epochs.",
          fontsize=8.5, color="#52514e")
 fig.tight_layout(rect=(0, 0.04, 1, 1))
 fig.savefig(OUT / "isic_trend.png", dpi=200)

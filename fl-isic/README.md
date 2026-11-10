@@ -74,6 +74,22 @@ it. Arguments (see `python isic.py -h`):
 | `--eval-every` | 1 | evaluate about this often, in epochs |
 | `--max-images` | | cap every train/test set, for quick tests |
 
+### Longer runs
+
+Write a different budget to its own folder so it doesn't mix with the 20-epoch
+rows in `results/`. For 40 epochs (FedAvg takes about 3 hours, inside the
+8-hour job limit):
+
+```bash
+for s in 0 1 2; do
+  sbatch isic.sbatch --method pooled --epochs 40 --seed $s --out results40
+  sbatch isic.sbatch --method fedavg --T 100 --epochs 40 --seed $s --out results40
+done
+python summarize.py results40
+```
+
+The trend table then fits over epochs 20-40, the second half of training.
+
 ## Budget
 
 One pooled epoch is 291 steps of batch 64, so the default 20 epochs is 5820
