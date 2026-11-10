@@ -117,12 +117,12 @@ under `[tool.flwr.app.config]`): `num-server-rounds`, `local-epochs`, `lr`,
 ## Local steps T vs pooled
 
 ```bash
-python local_steps.py      # T = 1 ... 6100, 50 epochs, seeds 0-4 (~20 min)
+python local_steps.py      # T = 1 ... 2440, 20 epochs, seeds 0-4 (~8 min)
 ```
 
 FedAvg where each hospital takes T minibatch SGD steps per round (not
 epochs), compared with pooled training on the same budget: every run takes
-the same number of SGD steps (50 pooled-equivalent epochs = 50 × 122 steps),
+the same number of SGD steps (20 pooled-equivalent epochs = 20 × 122 steps),
 so FedAvg with T steps runs budget / T rounds. With T = 1 the server's
 average is one SGD step on a gradient averaged over all hospitals, which is
 pooled SGD with a bigger batch; larger T lets each hospital drift toward its
@@ -130,17 +130,22 @@ own data between averages but needs far fewer rounds. Same lr for every run
 (`--lr`, default 0.003), so T is the only thing that changes.
 
 The default sweep covers the two endpoints and 10 values between them, spaced
-evenly on a log scale. Each T divides the 6100-step budget, so every run takes
+evenly on a log scale. Each T divides the 2440-step budget, so every run takes
 exactly the same number of steps:
 
-| T | 1 | 2 | 5 | 10 | 25 | 50 | 122 | 244 | 610 | 1220 | 3050 | 6100 |
+| T | 1 | 2 | 4 | 8 | 20 | 40 | 61 | 122 | 305 | 610 | 1220 | 2440 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| rounds | 6100 | 3050 | 1220 | 610 | 244 | 122 | 50 | 25 | 10 | 5 | 2 | 1 |
+| rounds | 2440 | 1220 | 610 | 305 | 122 | 61 | 40 | 20 | 8 | 4 | 2 | 1 |
 
-T = 1 is pooled SGD with a bigger batch. T = 6100 is a single round: each
+T = 1 is pooled SGD with a bigger batch. T = 2440 is a single round: each
 hospital trains alone for the whole budget (Switzerland's 30 patients get about
-760 passes), and the server averages the four models once at the end. A
+300 passes), and the server averages the four models once at the end. A
 different `--epochs` picks its own divisors; `--Ts` overrides the list.
+
+The budget is 20 epochs because that's where pooled has finished: in the
+earlier 50-epoch run its test balanced accuracy peaked at 0.746 around epoch
+10-15 and slid to 0.734 by 50. Training past that only adds overfitting on top
+of whatever T changes.
 
 Pooled here is not quite `baselines.py`'s pooled. FLamby scales features with
 each hospital's own mean/std, but with `pooled=True` it uses all hospitals'

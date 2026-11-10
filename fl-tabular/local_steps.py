@@ -1,6 +1,6 @@
 """FedAvg with T local SGD steps per round, against pooled training.
 
-    python local_steps.py                  # T from 1 to the whole budget, 50 epochs, seeds 0-4
+    python local_steps.py                  # T from 1 to the whole budget, 20 epochs, seeds 0-4
     python local_steps.py --Ts 1 10 100 --epochs 20 --seeds 0 1
 
 Each round, every hospital starts from the global model, takes T minibatch SGD
@@ -50,7 +50,8 @@ p = argparse.ArgumentParser()
 p.add_argument("--Ts", type=int, nargs="+",
                help="local SGD steps per round (default: --n-T values from 1 to the whole budget)")
 p.add_argument("--n-T", type=int, default=12, help="how many T values in the default sweep")
-p.add_argument("--epochs", type=int, default=50, help="training budget, pooled-equivalent epochs")
+p.add_argument("--epochs", type=int, default=20,
+               help="training budget, pooled-equivalent epochs (pooled peaks around 10-20)")
 p.add_argument("--lr", type=float, default=0.003, help="same for every run (tuned pooled/FedAvg lr)")
 p.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2, 3, 4])
 p.add_argument("--eval-every", type=float, default=1.0,
