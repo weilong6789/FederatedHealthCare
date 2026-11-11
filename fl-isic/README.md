@@ -116,6 +116,10 @@ python summarize.py
 
 With more than one T, `summarize.py` adds a table of final scores by T to
 `summary.md` and plots them against pooled in `results/isic_T_sweep.png`.
+`python plot_T_sweep.py` (seconds) makes the sweep figures from runs that
+finished: `results/T_final.png` (score vs T), `T_curves.png` (one panel per T),
+`T_hospitals.png` (each hospital vs pooled and local) and `T_classes.png`
+(recall per class).
 Jobs lock the CSVs while appending, so runs finishing at once don't splice
 lines together. Expect `summarize.py` to take a few minutes per T: the
 bootstrap rescoring is the slow part.
