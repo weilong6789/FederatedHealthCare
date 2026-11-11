@@ -12,6 +12,7 @@ dependencies = [
     "pandas>=2.0.0",
     "scikit-learn>=1.3.0",
     "matplotlib>=3.8.0",
+    "opacus>=1.5.0",       # for DPSGDTrainer in fltab/privacy.py
     # plus FLamby, which is not on PyPI -- see README for how to install it
 ]
 

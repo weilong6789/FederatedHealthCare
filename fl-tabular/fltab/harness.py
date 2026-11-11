@@ -159,37 +159,46 @@ def all_patients_test():
     return DataLoader(_all_patients(False), batch_size=BATCH_SIZE)
 
 
-def pooled_steps(seed, lr, total, eval_every=None, on_eval=None):
+def pooled_steps(seed, lr, total, eval_every=None, on_eval=None, privacy=None):
     """Pooled SGD for `total` minibatch steps on all hospitals' training data,
     scaled per hospital (see above). Calls on_eval(round=0, steps, model) at
-    step 0, every `eval_every` steps and at the end."""
+    step 0, every `eval_every` steps and at the end. `privacy` (see
+    fltab/privacy.py) switches to DP-SGD. Returns (model, [ε]); ε is None
+    without DP."""
+    from fltab.privacy import make_trainer
     set_seed(seed)
     model = make_model()
-    it = batches(DataLoader(_all_patients(True), batch_size=BATCH_SIZE, shuffle=True,
-                            generator=torch.Generator().manual_seed(seed)))
+    trainer = make_trainer(DataLoader(_all_patients(True), batch_size=BATCH_SIZE, shuffle=True,
+                                      generator=torch.Generator().manual_seed(seed)),
+                           lr, privacy)
     if on_eval:
         on_eval(0, 0, model)
     done, chunk = 0, eval_every or total
     while done < total:
         n = min(chunk, total - done)
-        train_steps(model, it, lr, n)
+        trainer.train(model, n)
         done += n
         if on_eval:
             on_eval(0, done, model)
-    return model
+    return model, [trainer.epsilon()]
 
 
-def fedavg_steps(seed, T, lr, total, eval_every=None, on_eval=None):
+def fedavg_steps(seed, T, lr, total, eval_every=None, on_eval=None, privacy=None):
     """FedAvg where every hospital takes T minibatch SGD steps per round, for
     ceil(total / T) rounds, averaged weighted by hospital size (as Flower's
     FedAvg does). Same initial model as pooled_steps with the same seed. Calls
     on_eval(round, steps, model) at round 0, at the first round end past each
-    multiple of `eval_every` steps, and at the last round."""
+    multiple of `eval_every` steps, and at the last round. `privacy` (see
+    fltab/privacy.py) switches every hospital to DP-SGD. Returns (model, ε per
+    hospital); ε is None without DP."""
+    from fltab.privacy import make_trainer
     set_seed(seed)
     model = make_model()
     loaders = [train_loader(center=i, seed=seed * 1000 + i) for i in range(NUM_CLIENTS)]
-    its = [batches(dl) for dl in loaders]            # each hospital keeps its place
     sizes = [len(dl.dataset) for dl in loaders]
+    # one trainer per hospital for the whole run: it keeps its place in the
+    # data and, under DP, its privacy accountant
+    trainers = [make_trainer(dl, lr, privacy) for dl in loaders]
     local = make_model()
     rounds = -(-total // T)
     if on_eval:
@@ -197,9 +206,9 @@ def fedavg_steps(seed, T, lr, total, eval_every=None, on_eval=None):
     next_eval = eval_every or total
     for r in range(1, rounds + 1):
         states = []
-        for it in its:
+        for trainer in trainers:
             local.load_state_dict(model.state_dict())
-            train_steps(local, it, lr, T)
+            trainer.train(local, T)
             states.append({k: v.clone() for k, v in local.state_dict().items()})
         model.load_state_dict({k: sum(s[k] * n for s, n in zip(states, sizes)) / sum(sizes)
                                for k in states[0]})
@@ -207,7 +216,7 @@ def fedavg_steps(seed, T, lr, total, eval_every=None, on_eval=None):
         if on_eval and (steps >= next_eval or r == rounds):
             on_eval(r, steps, model)
             next_eval = (steps // (eval_every or total) + 1) * (eval_every or total)
-    return model
+    return model, [t.epsilon() for t in trainers]
 
 
 def steps_per_pooled_epoch():

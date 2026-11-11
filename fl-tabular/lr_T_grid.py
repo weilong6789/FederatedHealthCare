@@ -2,6 +2,7 @@
 
     python lr_T_grid.py                       # defaults below, ~30 min
     python lr_T_grid.py --lrs 0.01 0.1 1 --Ts 1 10 100 --seeds 0   # quick look
+    python lr_T_grid.py --dp --noise-multiplier 1.0 --max-grad-norm 1.0  # DP-SGD everywhere
 
 Each cell runs FedAvg with T local SGD steps per round and pooled SGD at the
 same lr, both for the same number of SGD steps (`--epochs` pooled-equivalent
@@ -14,6 +15,9 @@ up toward the top-right. Very large lr can make pooled itself unstable; the
 pooled row in the table shows when that happens. A blue (positive) cell at
 high lr and small T is not drift: averaging 4 hospitals' steps is like pooled
 SGD with a 16-patient batch, which is less noisy than pooled's batch of 4.
+
+With --dp both FedAvg and pooled train with DP-SGD (fltab/privacy.py) and the
+outputs get a `_dp_s<σ>_c<C>` suffix.
 
 Writes:
     results/lr_T_grid.csv           final scores per lr, T, seed
@@ -31,13 +35,18 @@ import pandas as pd
 
 from fltab.harness import (METRICS, ROOT, all_patients_test, evaluate, fedavg_steps,
                            pooled_steps, steps_per_pooled_epoch)
+from fltab.privacy import add_privacy_args, privacy_from_args
 
 p = argparse.ArgumentParser()
 p.add_argument("--lrs", type=float, nargs="+", default=[0.003, 0.01, 0.03, 0.1, 0.3, 1.0])
 p.add_argument("--Ts", type=int, nargs="+", default=[1, 5, 25, 100, 500])
 p.add_argument("--epochs", type=int, default=20, help="training budget, pooled-equivalent epochs")
 p.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2])
+add_privacy_args(p)
 args = p.parse_args()
+PRIV = privacy_from_args(args)
+TAG = PRIV.tag() if PRIV else ""
+DESC = f", {PRIV.describe()}" if PRIV else ""
 
 OUT = ROOT / "results"
 OUT.mkdir(exist_ok=True)
@@ -48,14 +57,16 @@ LABELS = {"accuracy": "accuracy", "balanced_accuracy": "balanced accuracy", "auc
 rows = []
 for lr in args.lrs:
     for seed in args.seeds:
+        model, eps = pooled_steps(seed, lr, TOTAL, privacy=PRIV)
         rows.append({"method": "pooled", "lr": lr, "T": 0, "seed": seed,
-                     **evaluate(pooled_steps(seed, lr, TOTAL), TEST)})
+                     **evaluate(model, TEST), "epsilon": max(eps) if PRIV else None})
         for T in args.Ts:
+            model, eps = fedavg_steps(seed, T, lr, TOTAL, privacy=PRIV)
             rows.append({"method": "fedavg", "lr": lr, "T": T, "seed": seed,
-                         **evaluate(fedavg_steps(seed, T, lr, TOTAL), TEST)})
+                         **evaluate(model, TEST), "epsilon": max(eps) if PRIV else None})
     print(f"lr {lr} done")
 
-with open(OUT / "lr_T_grid.csv", "w", newline="") as f:
+with open(OUT / f"lr_T_grid{TAG}.csv", "w", newline="") as f:
     w = csv.DictWriter(f, fieldnames=rows[0].keys())
     w.writeheader()
     w.writerows(rows)
@@ -81,18 +92,23 @@ for k in METRICS:
     ax.set_ylabel("learning rate")
     ax.set_title(f"FedAvg − pooled, final test {LABELS[k]}\n"
                  f"{args.epochs} pooled-equivalent epochs ({TOTAL} steps), "
-                 f"{len(args.seeds)} seed(s)", fontsize=9)
+                 f"{len(args.seeds)} seed(s){DESC}", fontsize=9)
     fig.colorbar(im, ax=ax, label="red: FedAvg worse, blue: better")
     fig.tight_layout()
-    fig.savefig(OUT / f"lr_T_grid_{k}.png", dpi=150)
+    fig.savefig(OUT / f"lr_T_grid{TAG}_{k}.png", dpi=150)
     plt.close(fig)
 
 lines = [f"## FedAvg − pooled over learning rate × T ({args.epochs} pooled-equivalent "
-         f"epochs, seeds {', '.join(map(str, args.seeds))})", "",
+         f"epochs{DESC}, seeds {', '.join(map(str, args.seeds))})", "",
          "Pooled final test scores per lr (if these drop at high lr, pooled itself is "
          "unstable there and the gap below means less):", "",
          "| lr | " + " | ".join(LABELS[k] for k in METRICS) + " |",
          "|---|" + "---|" * len(METRICS)]
+if PRIV:
+    eps = df.groupby("method")["epsilon"].max()
+    lines[1:1] = ["", f"ε at δ = {PRIV.delta:g} (worst cell; it depends on σ, C and the "
+                  f"number of steps, not on lr, and T only through rounding up the last round): pooled {eps['pooled']:.2f}, "
+                  f"FedAvg worst hospital {eps['fedavg']:.2f}."]
 pm = pooled.groupby("lr").mean()
 for lr in lrs:
     lines.append(f"| {lr} | " + " | ".join(f"{pm.loc[lr, k]:.3f}" for k in METRICS) + " |")
@@ -103,5 +119,5 @@ for k in METRICS:
     for lr in lrs:
         lines.append(f"| {lr} | " + " | ".join(f"{gap_mean.loc[(lr, T), k]:+.3f}"
                                                for T in Ts) + " |")
-(OUT / "lr_T_grid.md").write_text("\n".join(lines) + "\n")
+(OUT / f"lr_T_grid{TAG}.md").write_text("\n".join(lines) + "\n")
 print("\n".join(lines))

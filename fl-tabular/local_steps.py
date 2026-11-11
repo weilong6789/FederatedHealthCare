@@ -2,6 +2,7 @@
 
     python local_steps.py                  # T from 1 to the whole budget, 20 epochs, seeds 0-4
     python local_steps.py --Ts 1 10 100 --epochs 20 --seeds 0 1
+    python local_steps.py --dp --noise-multiplier 1.0 --max-grad-norm 1.0   # DP-SGD
 
 Each round, every hospital starts from the global model, takes T minibatch SGD
 steps on its own data, and the server averages the results weighted by
@@ -28,6 +29,10 @@ Writes:
     results/local_steps_tradeoff.png      final score and rounds needed vs T
     results/local_steps.md                the table behind the tradeoff plot
 
+With --dp every hospital (and pooled) trains with DP-SGD (fltab/privacy.py),
+the outputs get a `_dp_s<σ>_c<C>` suffix so they sit next to the non-DP ones,
+and the tables add each hospital's ε.
+
 Scores are on all 254 test patients together, so one patient counts the same
 at every hospital. Pooled and FedAvg both train and test on features scaled
 per hospital (FLamby's per-center scaling), so they see the same inputs; see
@@ -45,6 +50,7 @@ import pandas as pd
 
 from fltab.harness import (METRICS, NUM_CLIENTS, ROOT, all_patients_test, eval_loaders,
                            evaluate, fedavg_steps, pooled_steps, steps_per_pooled_epoch)
+from fltab.privacy import add_privacy_args, privacy_from_args
 
 p = argparse.ArgumentParser()
 p.add_argument("--Ts", type=int, nargs="+",
@@ -56,7 +62,11 @@ p.add_argument("--lr", type=float, default=0.003, help="same for every run (tune
 p.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2, 3, 4])
 p.add_argument("--eval-every", type=float, default=1.0,
                help="evaluate about this often, in epochs")
+add_privacy_args(p)
 args = p.parse_args()
+PRIV = privacy_from_args(args)
+TAG = PRIV.tag() if PRIV else ""                  # output file suffix
+DESC = f", {PRIV.describe()}" if PRIV else ""     # for plot titles
 
 OUT = ROOT / "results"
 OUT.mkdir(exist_ok=True)
@@ -90,6 +100,13 @@ rows = []
 hosp_rows = []        # final model only, scored at each hospital
 
 
+def finish(method, T, seed, eps):
+    """Attach each hospital's ε to the final-model rows of this run."""
+    for r in hosp_rows:
+        if (r["method"], r["T"], r["seed"]) == (method, T, seed):
+            r["epsilon"] = eps[0] if method == "pooled" else eps[int(r["client"])]
+
+
 def recorder(method, T, seed):
     def record(round_, steps, model):
         rows.append({"method": method, "T": T, "seed": seed, "round": round_,
@@ -103,16 +120,19 @@ def recorder(method, T, seed):
 
 
 for seed in args.seeds:
-    pooled_steps(seed, args.lr, TOTAL, EVAL_EVERY, recorder("pooled", 0, seed))
+    _, eps = pooled_steps(seed, args.lr, TOTAL, EVAL_EVERY, recorder("pooled", 0, seed), PRIV)
+    finish("pooled", 0, seed, eps)
     for T in args.Ts:
-        fedavg_steps(seed, T, args.lr, TOTAL, EVAL_EVERY, recorder("fedavg", T, seed))
+        _, eps = fedavg_steps(seed, T, args.lr, TOTAL, EVAL_EVERY, recorder("fedavg", T, seed),
+                              PRIV)
+        finish("fedavg", T, seed, eps)
     print(f"seed {seed} done")
 
-with open(OUT / "local_steps.csv", "w", newline="") as f:
+with open(OUT / f"local_steps{TAG}.csv", "w", newline="") as f:
     w = csv.DictWriter(f, fieldnames=rows[0].keys())
     w.writeheader()
     w.writerows(rows)
-with open(OUT / "local_steps_hospitals.csv", "w", newline="") as f:
+with open(OUT / f"local_steps{TAG}_hospitals.csv", "w", newline="") as f:
     w = csv.DictWriter(f, fieldnames=hosp_rows[0].keys())
     w.writeheader()
     w.writerows(hosp_rows)
@@ -143,10 +163,11 @@ for k in METRICS:
     ax.plot(x, m, "k--", linewidth=2, label="pooled")
     ax.set_xlabel(f"total training, pooled-equivalent epochs ({STEPS_PER_EPOCH} SGD steps each)")
     ax.set_ylabel(f"test {LABELS[k]}, all 254 test patients")
-    ax.set_title(f"FedAvg with T local steps per round vs pooled (lr {args.lr})")
+    ax.set_title(f"FedAvg with T local steps per round vs pooled (lr {args.lr}{DESC})",
+                 fontsize=9)
     ax.legend(fontsize=8, ncol=2)
     fig.tight_layout()
-    fig.savefig(OUT / f"local_steps_curve_{k}.png", dpi=150)
+    fig.savefig(OUT / f"local_steps{TAG}_curve_{k}.png", dpi=150)
     plt.close(fig)
 
     # Same runs against communication: how many rounds each T needs to get there
@@ -160,10 +181,10 @@ for k in METRICS:
     ax.set_xscale("log")
     ax.set_xlabel("communication rounds")
     ax.set_ylabel(f"test {LABELS[k]}, all 254 test patients")
-    ax.set_title(f"Score vs communication rounds (lr {args.lr})")
+    ax.set_title(f"Score vs communication rounds (lr {args.lr}{DESC})", fontsize=9)
     ax.legend(fontsize=8, ncol=2)
     fig.tight_layout()
-    fig.savefig(OUT / f"local_steps_rounds_{k}.png", dpi=150)
+    fig.savefig(OUT / f"local_steps{TAG}_rounds_{k}.png", dpi=150)
     plt.close(fig)
 
 final = df[df["steps"] == df.groupby(["run", "seed"])["steps"].transform("max")]
@@ -187,27 +208,34 @@ ax.set_yscale("log")
 ax.set_xlabel("T, local SGD steps per round")
 ax.set_ylabel("communication rounds needed")
 fig.suptitle(f"Same budget for every T: {args.epochs} pooled-equivalent epochs "
-             f"({TOTAL} SGD steps), lr {args.lr}")
+             f"({TOTAL} SGD steps), lr {args.lr}{DESC}")
 fig.tight_layout()
-fig.savefig(OUT / "local_steps_tradeoff.png", dpi=150)
+fig.savefig(OUT / f"local_steps{TAG}_tradeoff.png", dpi=150)
 plt.close(fig)
 
 # ---------------------------------------------------------------- table
+hdf = pd.DataFrame(hosp_rows)
+# Worst ε over hospitals, mean over seeds (with DP; "-" without)
+worst_eps = (hdf.groupby(["method", "T", "seed"])["epsilon"].max().groupby(["method", "T"]).mean()
+             if PRIV else None)
+eps_cell = lambda r: f" | {worst_eps.loc[r]:.2f}" if PRIV else ""
 lines = [f"## FedAvg with T local steps vs pooled ({args.epochs} pooled-equivalent epochs, "
-         f"lr {args.lr}, seeds {', '.join(map(str, args.seeds))})", "",
+         f"lr {args.lr}{DESC}, seeds {', '.join(map(str, args.seeds))})", "",
          "Final test scores on all 254 test patients, mean ± std over seeds. Every row "
          f"takes the same {TOTAL} SGD steps; FedAvg spreads them over rounds × T.", "",
-         "| run | rounds | " + " | ".join(LABELS[k] for k in METRICS) + " |",
-         "|---|---|" + "---|" * len(METRICS)]
+         "| run | rounds | " + " | ".join(LABELS[k] for k in METRICS)
+         + (" | ε, worst hospital" if PRIV else "") + " |",
+         "|---|---|" + "---|" * (len(METRICS) + bool(PRIV))]
 cell = lambda r, k: f"{agg.loc[r, (k, 'mean')]:.3f} ± {agg.loc[r, (k, 'std')]:.3f}"
-lines.append("| pooled | - | " + " | ".join(cell(("pooled", 0), k) for k in METRICS) + " |")
+lines.append("| pooled | - | " + " | ".join(cell(("pooled", 0), k) for k in METRICS)
+             + eps_cell(("pooled", 0)) + " |")
 for T in Ts:
     lines.append(f"| FedAvg T={T} | {math.ceil(TOTAL / T)} | "
-                 + " | ".join(cell(("fedavg", T), k) for k in METRICS) + " |")
+                 + " | ".join(cell(("fedavg", T), k) for k in METRICS)
+                 + eps_cell(("fedavg", T)) + " |")
 # ---------------------------------------------------------------- per hospital
 # Does a large T leave one hospital behind even when the overall score holds?
-hdf = pd.DataFrame(hosp_rows)
-hagg = hdf.groupby(["hospital", "method", "T"])[METRICS].mean()
+hagg = hdf.groupby(["hospital", "method", "T"])[METRICS + (["epsilon"] if PRIV else [])].mean()
 names = [h for h in HOSPITALS if h in hdf["hospital"].unique()]
 hcolor = {h: plt.get_cmap("tab10")(i) for i, h in enumerate(names)}
 
@@ -223,19 +251,23 @@ for ax, k in zip(axes, METRICS):
     ax.set_title(LABELS[k])
 axes[0].legend(fontsize=8)
 fig.suptitle(f"Each hospital's own test set: FedAvg (lines) vs pooled (dashed), "
-             f"lr {args.lr}, mean of {len(args.seeds)} seeds")
+             f"lr {args.lr}, mean of {len(args.seeds)} seeds{DESC}")
 fig.tight_layout()
-fig.savefig(OUT / "local_steps_hospitals.png", dpi=150)
+fig.savefig(OUT / f"local_steps{TAG}_hospitals.png", dpi=150)
 plt.close(fig)
 
-for k in METRICS:
-    lines += ["", f"Final test {LABELS[k]} at each hospital, mean over seeds:", "",
+for k in METRICS + (["epsilon"] if PRIV else []):
+    what = f"ε (δ = {PRIV.delta:g}) spent by" if k == "epsilon" else f"Final test {LABELS[k]} at"
+    lines += ["", f"{what} each hospital, mean over seeds:", "",
               "| hospital | pooled | " + " | ".join(f"T={T}" for T in Ts) + " |",
               "|---|---|" + "---|" * len(Ts)]
     for h in names:
         lines.append(f"| {h} | {hagg.loc[(h, 'pooled', 0), k]:.3f} | "
                      + " | ".join(f"{hagg.loc[(h, 'fedavg', T), k]:.3f}" for T in Ts) + " |")
+if PRIV:
+    lines += ["", "Pooled's ε is one guarantee for all 486 training patients together; "
+              "FedAvg's is each hospital's guarantee for its own patients."]
 lines += ["", "Switzerland has 16 test patients, one of them label 0, so its accuracy moves "
           "in steps of 0.062 and its AUC rests on that one patient. Long Beach VA has 45."]
-(OUT / "local_steps.md").write_text("\n".join(lines) + "\n")
+(OUT / f"local_steps{TAG}.md").write_text("\n".join(lines) + "\n")
 print("\n".join(lines))

@@ -105,6 +105,7 @@ under `[tool.flwr.app.config]`): `num-server-rounds`, `local-epochs`, `lr`,
 | `baselines.py` | the `pooled` and `local` comparisons. No Flower. |
 | `local_steps.py` | FedAvg with T local SGD steps per round vs pooled, same step budget |
 | `lr_T_grid.py` | FedAvg − pooled over a learning rate × T grid |
+| `fltab/privacy.py` | the trainer every in-process experiment uses; DP-SGD goes in `DPSGDTrainer` here |
 | `OPACUS_HANDOFF.md` | where DP-SGD (Opacus) plugs into this code |
 | `tune.py` | picks each method's learning rate (and FedAvg's local epochs) on a validation split |
 | `summarize.py` | turns `results/results.csv` into `results/summary.md` and plots per metric |
@@ -191,6 +192,20 @@ The resampling keeps each hospital's label counts fixed, so every resample has
 both labels. All methods are scored on the same resamples, which gives paired
 intervals for the differences (FedAvg minus pooled, FedAvg minus local). A
 difference whose interval contains 0 is not evidence that one method is better.
+
+## Differential privacy
+
+`baselines.py`, `local_steps.py` and `lr_T_grid.py` all take the same DP flags:
+
+```bash
+python local_steps.py --dp --noise-multiplier 1.0 --max-grad-norm 1.0 --delta 1e-3
+```
+
+Each hospital (and pooled) then trains with DP-SGD, ε per hospital goes in the
+tables, and output files get a `_dp_s<σ>_c<C>` suffix so the non-DP results
+stay put. The DP-SGD step itself is not implemented yet: it goes in
+`DPSGDTrainer` in `fltab/privacy.py`, and until then `--dp` exits with an
+error. `OPACUS_HANDOFF.md` has the details.
 
 ## Where this goes next
 
