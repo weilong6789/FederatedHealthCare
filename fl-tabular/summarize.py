@@ -291,16 +291,12 @@ with open("results/summary.md", "w") as f:
 
 # ---------- curves: mean over hospitals, averaged over seeds
 fed = hospitals[hospitals["round"] >= 0]
-plots = [("accuracy", "round", "server round"),
-         ("accuracy", "bytes_uploaded", "total bytes uploaded")] + \
-        [(k, "round", "server round") for k in metrics[1:]]
-
-for k, x, label in plots:
-    curves = fed.groupby(["method", "seed", "round", "bytes_uploaded"])[k].mean() \
-                .groupby(["method", "round", "bytes_uploaded"]).mean().reset_index()
+for k in metrics:
+    curves = fed.groupby(["method", "seed", "round"])[k].mean() \
+                .groupby(["method", "round"]).mean().reset_index()
     fig, ax = plt.subplots(figsize=(6, 4))
     for m, g in curves.groupby("method"):
-        ax.plot(g[x], g[k], label=m)
+        ax.plot(g["round"], g[k], label=m)
     for m, style in [("pooled", "--"), ("local", ":")]:
         if m in means[k].columns:
             ax.axhline(means[k][m].mean(), linestyle=style, color="grey",
@@ -311,12 +307,12 @@ for k, x, label in plots:
     elif balance:
         ax.axhline(base.mean(), linestyle="-.", color="firebrick",
                    label="majority class")
-    ax.set_xlabel(label)
+    ax.set_xlabel("server round")
     ax.set_ylabel(f"mean test {LABELS[k]} over hospitals")
     ax.set_title("Fed-Heart-Disease")
     ax.legend()
     fig.tight_layout()
-    fname = f"{k}_vs_{'bytes' if x == 'bytes_uploaded' else x}.png"
+    fname = f"{k}_vs_round.png"
     fig.savefig(f"results/{fname}", dpi=150)
     plt.close(fig)
     print(f"saved results/{fname}")

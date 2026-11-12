@@ -7,7 +7,7 @@ from flwr.common.logger import log as flwr_log
 from flwr.serverapp import Grid, ServerApp
 from flwr.serverapp.strategy import FedAvg
 
-from fltab.harness import (NUM_CLIENTS, array_bytes, evaluate_all, log, make_model,
+from fltab.harness import (NUM_CLIENTS, evaluate_all, log, make_model,
                               predict_hospitals, save_predictions, set_seed)
 
 app = ServerApp()
@@ -30,15 +30,12 @@ def main(grid: Grid, context: Context) -> None:
     set_seed(seed)                       # same initial model as the baselines
     model = make_model()
     init = OrderedDict(model.state_dict())
-    upload_per_client = array_bytes(init)
 
     def global_evaluate(server_round: int, arrays: ArrayRecord) -> MetricRecord:
         m = make_model()
         m.load_state_dict(arrays.to_torch_state_dict())
         results = evaluate_all(m)
-        log("fedavg", seed, results, round_=server_round,
-            bytes_uploaded=server_round * NUM_CLIENTS * upload_per_client,
-            lr=lr, local_epochs=epochs)
+        log("fedavg", seed, results, round_=server_round, lr=lr, local_epochs=epochs)
         if server_round == rounds:       # final model: keep per-patient predictions
             save_predictions("fedavg", seed, predict_hospitals(m))
         return MetricRecord({f"{k}_{client}": v for client, metrics in results.items()

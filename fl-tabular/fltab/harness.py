@@ -35,7 +35,7 @@ RESULTS_PATH = ROOT / "results" / "results.csv"
 PREDICTIONS_PATH = ROOT / "results" / "predictions.csv"
 METRICS = ["accuracy", "balanced_accuracy", "auc"]
 FIELDS = ["timestamp", "commit", "method", "seed", "round", "client",
-          *METRICS, "bytes_uploaded", "lr", "local_epochs"]
+          *METRICS, "lr", "local_epochs"]
 
 
 # ---------------------------------------------------------------- setup
@@ -258,10 +258,6 @@ def predict_hospitals(model):
             for i in range(NUM_CLIENTS)}
 
 
-def array_bytes(state):
-    return sum(t.numel() * t.element_size() for t in state.values())
-
-
 # ---------------------------------------------------------------- logging
 def _git_commit():
     try:
@@ -272,7 +268,7 @@ def _git_commit():
         return "nogit"
 
 
-def log(method, seed, results, round_=-1, bytes_uploaded=0, lr=None, local_epochs=None):
+def log(method, seed, results, round_=-1, lr=None, local_epochs=None):
     """Append one row per client to results/results.csv.
 
     `results` maps client -> the metrics dict from `evaluate`.
@@ -289,8 +285,7 @@ def log(method, seed, results, round_=-1, bytes_uploaded=0, lr=None, local_epoch
                 "commit": _git_commit(), "method": method, "seed": seed,
                 "round": round_, "client": client,
                 **{k: round(metrics[k], 4) for k in METRICS},
-                "bytes_uploaded": bytes_uploaded, "lr": lr,
-                "local_epochs": local_epochs,
+                "lr": lr, "local_epochs": local_epochs,
             })
 
 
