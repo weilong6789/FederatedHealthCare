@@ -4,7 +4,7 @@
     python summarize.py results40    # same for another results folder
 
 Writes <folder>/summary.md, <folder>/isic_curve_<metric>.png, <folder>/isic_trend.png
-and, once there is more than one FedAvg T, <folder>/isic_T_sweep.png.
+and, once there is more than one FedAvg K, <folder>/isic_K_sweep.png.
 """
 import sys
 from pathlib import Path
@@ -33,14 +33,14 @@ if (~ok).any():
     print(d[~ok].to_string())
 d = d[ok].copy()
 d[["seed", "round", "steps", "n"]] = d[["seed", "round", "steps", "n"]].astype(int)
-d["T"] = pd.to_numeric(d["T"], errors="coerce")
+d["K"] = pd.to_numeric(d["K"], errors="coerce")
 d["run"] = d.method + np.where(d.method == "fedavg",
-                               " T=" + d["T"].fillna(0).astype(int).astype(str), "")
+                               " K=" + d["K"].fillna(0).astype(int).astype(str), "")
 d = d.drop_duplicates(["run", "seed", "steps", "client"], keep="last")
 final = d.loc[d.groupby(["run", "seed", "client"]).steps.idxmax()]
-FED = sorted((r for r in set(d.run) if r.startswith("fedavg")), key=lambda r: int(r[len("fedavg T="):]))
+FED = sorted((r for r in set(d.run) if r.startswith("fedavg")), key=lambda r: int(r[len("fedavg K="):]))
 RUNS = [r for r in ["local", "pooled"] if r in set(d.run)] + FED
-# pooled blue; FedAvg orange when there is one T, light to dark by T when there are several
+# pooled blue; FedAvg orange when there is one K, light to dark by K when there are several
 COLORS = {"pooled": "#2a78d6"}
 _cmap = plt.get_cmap("YlOrRd")
 for i, r in enumerate(FED):
@@ -106,7 +106,7 @@ def arrays(run_tag):
     return out
 
 
-tags = {r: r.replace(" T=", "_T") for r in RUNS if r != "local"}
+tags = {r: r.replace(" K=", "_K") for r in RUNS if r != "local"}
 arr = {r: arrays(t) for r, t in tags.items()}
 fed = [r for r in tags if r.startswith("fedavg")]
 if "pooled" in arr and fed:
@@ -214,13 +214,13 @@ fig.tight_layout(rect=(0, 0.04, 1, 1))
 fig.savefig(OUT / "isic_trend.png", dpi=200)
 plt.close(fig)
 
-# ---------------------------------------------------------------- T sweep
+# ---------------------------------------------------------------- K sweep
 if len(FED) > 1:
     fin = final[final.client == "all"]
     pooled_fin = fin[fin.run == "pooled"]
-    lines.append("## FedAvg local steps per round (T), all test images\n")
-    lines.append("Final score, mean ± std over seeds. Rounds = steps / T, so T = 1 averages "
-                 "after every step and the largest T averages once at the end. T values that "
+    lines.append("## FedAvg local steps per round (K), all test images\n")
+    lines.append("Final score, mean ± std over seeds. Rounds = steps / K, so K = 1 averages "
+                 "after every step and the largest K averages once at the end. K values that "
                  "don't divide the budget run a few extra steps (see `steps`).\n")
     rows = []
     if len(pooled_fin):
@@ -233,17 +233,17 @@ if len(FED) > 1:
     table(["run", "rounds", "steps", *METRICS.values()], rows)
 
     fig, axes = plt.subplots(1, len(METRICS), figsize=(4.2 * len(METRICS), 3.8))
-    Ts = np.array([int(r[len("fedavg T="):]) for r in FED])
+    Ks = np.array([int(r[len("fedavg K="):]) for r in FED])
     for ax, (m, name) in zip(axes, METRICS.items()):
         g = fin[fin.run.isin(FED)].groupby("run")[m].agg(["mean", "std"]).loc[FED]
-        ax.errorbar(Ts, g["mean"], yerr=g["std"], color="#eb6834", marker="o", ms=4,
+        ax.errorbar(Ks, g["mean"], yerr=g["std"], color="#eb6834", marker="o", ms=4,
                     lw=1.8, capsize=3, label="FedAvg")
         if len(pooled_fin):
             mu, sd = pooled_fin[m].mean(), pooled_fin[m].std()
             ax.axhline(mu, color=COLORS["pooled"], ls="--", lw=1.5, label="pooled")
             ax.axhspan(mu - sd, mu + sd, color=COLORS["pooled"], alpha=0.12, lw=0)
         ax.set_xscale("log")
-        ax.set_xlabel("local steps per round (T)")
+        ax.set_xlabel("local steps per round (K)")
         ax.set_title(f"test {name}, all 4650 images", fontsize=11, loc="left")
         ax.grid(alpha=0.25, lw=0.6)
         for sp in ["top", "right"]:
@@ -252,7 +252,7 @@ if len(FED) > 1:
     fig.text(0.01, 0.01, "Final model, mean ± 1 std over seeds. Pooled: dashed line and band.",
              fontsize=8.5, color="#52514e")
     fig.tight_layout(rect=(0, 0.04, 1, 1))
-    fig.savefig(OUT / "isic_T_sweep.png", dpi=200)
+    fig.savefig(OUT / "isic_K_sweep.png", dpi=200)
     plt.close(fig)
 
 # ---------------------------------------------------------------- settings

@@ -1,4 +1,4 @@
-method,T,seed,round,steps,epochs,client,accuracy,balanced_accuracy,auc,n,lr,opt,seconds
+method,K,seed,round,steps,epochs,client,accuracy,balanced_accuracy,auc,n,lr,opt,seconds
 local,,0,0,156,1.0,0,0.5243656866693516,0.4985812216958273,0.8821101785807726,2483,0.0005,adam,19
 fedavg,100,0,0,0,0,0,0.06967378171566653,0.11584242905958064,0.506543854011207,2483,0.0005,adam,10
 fedavg,100,0,0,0,0,1,0.0025284450063211127,0.04444444444444444,0.47420622493471987,791,0.0005,adam,10

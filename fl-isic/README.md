@@ -46,7 +46,7 @@ Smoke test first, on a GPU node (a couple of minutes):
 salloc -N1 --cpus-per-task=8 --gres=gpu:1 -t 0:30:00
 module load anaconda3 && conda activate ~/scratch/envs/flamby
 cd ~/FederatedHealthCare/fl-isic
-python isic.py --method fedavg --T 5 --epochs 1 --max-images 256 --out results_smoke
+python isic.py --method fedavg --K 5 --epochs 1 --max-images 256 --out results_smoke
 ```
 
 Real runs as batch jobs, one per method and seed:
@@ -55,7 +55,7 @@ Real runs as batch jobs, one per method and seed:
 mkdir -p logs
 for s in 0 1 2; do
   sbatch isic.sbatch --method pooled --seed $s
-  sbatch isic.sbatch --method fedavg --T 100 --seed $s
+  sbatch isic.sbatch --method fedavg --K 100 --seed $s
   sbatch isic.sbatch --method local --seed $s
 done
 squeue -u $USER
@@ -69,7 +69,7 @@ it. Arguments (see `python isic.py -h`):
 |---|---|---|
 | `--method` | | `pooled`, `fedavg` or `local` |
 | `--epochs` | 20 | training budget in pooled-equivalent epochs (FLamby's pooled default) |
-| `--T` | 100 | FedAvg local steps per round |
+| `--K` | 100 | FedAvg local steps per round |
 | `--opt`, `--lr` | adam, 5e-4 | same for every method (FLamby's pooled setting) |
 | `--eval-every` | 1 | evaluate about this often, in epochs |
 | `--max-images` | | cap every train/test set, for quick tests |
@@ -83,51 +83,51 @@ rows in `results/`. For 40 epochs (FedAvg takes about 3 hours, inside the
 ```bash
 for s in 0 1 2; do
   sbatch isic.sbatch --method pooled --epochs 40 --seed $s --out results40
-  sbatch isic.sbatch --method fedavg --T 100 --epochs 40 --seed $s --out results40
+  sbatch isic.sbatch --method fedavg --K 100 --epochs 40 --seed $s --out results40
 done
 python summarize.py results40
 ```
 
 The trend table then fits over epochs 20-40, the second half of training.
 
-### Sweep of T (local steps per round)
+### Sweep of K (local steps per round)
 
-`sweep_T.sh` submits FedAvg at 20 epochs for T = 1, 5, 20, 97, 291, 970 and
-5820, seeds 0-2, into `results/`, next to the pooled and T = 100 rows already
-there. Every T divides the 5820-step budget, so every run takes exactly the
+`sweep_K.sh` submits FedAvg at 20 epochs for K = 1, 5, 20, 97, 291, 970 and
+5820, seeds 0-2, into `results/`, next to the pooled and K = 100 rows already
+there. Every K divides the 5820-step budget, so every run takes exactly the
 steps pooled does:
 
-| T | 1 | 5 | 20 | 97 | 291 | 970 | 5820 |
+| K | 1 | 5 | 20 | 97 | 291 | 970 | 5820 |
 |---|---|---|---|---|---|---|---|
 | rounds | 5820 | 1164 | 291 | 60 | 20 | 6 | 1 |
 
-T = 1 averages after every step; T = 5820 trains each hospital alone for the
+K = 1 averages after every step; K = 5820 trains each hospital alone for the
 whole budget and averages once. Each hospital still gets a fresh Adam every
-round, as in the T = 100 runs. Time a short T = 1 run first: its 5820 rounds
+round, as in the K = 100 runs. Time a short K = 1 run first: its 5820 rounds
 of copying and averaging weights come on top of the training, and every job
 must finish inside the 8-hour limit.
 
 ```bash
-python isic.py --method fedavg --T 1 --epochs 0.5 --out results_smoke   # on a GPU node
-bash sweep_T.sh                          # 21 jobs
-TS="1 5" SEEDS="0" bash sweep_T.sh       # or a subset
+python isic.py --method fedavg --K 1 --epochs 0.5 --out results_smoke   # on a GPU node
+bash sweep_K.sh                          # 21 jobs
+KS="1 5" SEEDS="0" bash sweep_K.sh       # or a subset
 python summarize.py
 ```
 
-With more than one T, `summarize.py` adds a table of final scores by T to
-`summary.md` and plots them against pooled in `results/isic_T_sweep.png`.
-`python plot_T_sweep.py` (seconds) makes the sweep figures from runs that
-finished: `results/T_final.png` (score vs T), `T_curves.png` (one panel per T),
-`T_hospitals.png` (each hospital vs pooled and local) and `T_classes.png`
+With more than one K, `summarize.py` adds a table of final scores by K to
+`summary.md` and plots them against pooled in `results/isic_K_sweep.png`.
+`python plot_K_sweep.py` (seconds) makes the sweep figures from runs that
+finished: `results/K_final.png` (score vs K), `K_curves.png` (one panel per K),
+`K_hospitals.png` (each hospital vs pooled and local) and `K_classes.png`
 (recall per class).
 Jobs lock the CSVs while appending, so runs finishing at once don't splice
-lines together. Expect `summarize.py` to take a few minutes per T: the
+lines together. Expect `summarize.py` to take a few minutes per K: the
 bootstrap rescoring is the slow part.
 
 ## Budget
 
 One pooled epoch is 291 steps of batch 64, so the default 20 epochs is 5820
-steps. FedAvg spends the same steps on the global model (5820 / T rounds), but
+steps. FedAvg spends the same steps on the global model (5820 / K rounds), but
 all six hospitals train each round, so it does six times the compute of
 pooled. Local trains each hospital for 20 passes over its own data, about the
 same compute as pooled.
@@ -152,7 +152,7 @@ interval for FedAvg − pooled) and `results/isic_curve_<metric>.png` (score on
 all test images vs epochs). `results/` is tracked by git; smoke-test folders
 (`results_*/`) and `logs/` are not.
 
-## First results (3 seeds, 20 epochs, FedAvg T = 100)
+## First results (3 seeds, 20 epochs, FedAvg K = 100)
 
 On all 4650 test images, FedAvg's balanced accuracy is 0.684 against pooled's
 0.748: −0.064, 95% CI [−0.081, −0.047]. Unlike Fed-Heart-Disease, FedAvg

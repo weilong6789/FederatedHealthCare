@@ -1,4 +1,4 @@
-## FedAvg − pooled over learning rate × T (20 pooled-equivalent epochs, seeds 0, 1, 2)
+## FedAvg − pooled over learning rate × K (20 pooled-equivalent epochs, seeds 0, 1, 2)
 
 Pooled final test scores per lr (if these drop at high lr, pooled itself is unstable there and the gap below means less):
 
@@ -11,9 +11,9 @@ Pooled final test scores per lr (if these drop at high lr, pooled itself is unst
 | 0.3 | 0.713 | 0.713 | 0.778 |
 | 1.0 | 0.657 | 0.657 | 0.700 |
 
-FedAvg − pooled, accuracy (rows lr, columns T):
+FedAvg − pooled, accuracy (rows lr, columns K):
 
-| lr | T=1 | T=5 | T=25 | T=100 | T=500 |
+| lr | K=1 | K=5 | K=25 | K=100 | K=500 |
 |---|---|---|---|---|---|
 | 0.003 | +0.000 | +0.000 | +0.001 | +0.001 | +0.003 |
 | 0.01 | +0.001 | +0.001 | +0.000 | +0.001 | +0.009 |
@@ -22,9 +22,9 @@ FedAvg − pooled, accuracy (rows lr, columns T):
 | 0.3 | +0.025 | +0.024 | +0.017 | +0.017 | +0.017 |
 | 1.0 | +0.085 | +0.079 | +0.070 | +0.042 | +0.034 |
 
-FedAvg − pooled, balanced accuracy (rows lr, columns T):
+FedAvg − pooled, balanced accuracy (rows lr, columns K):
 
-| lr | T=1 | T=5 | T=25 | T=100 | T=500 |
+| lr | K=1 | K=5 | K=25 | K=100 | K=500 |
 |---|---|---|---|---|---|
 | 0.003 | -0.000 | -0.000 | +0.001 | +0.001 | +0.003 |
 | 0.01 | +0.001 | +0.001 | +0.000 | +0.001 | +0.010 |
@@ -33,9 +33,9 @@ FedAvg − pooled, balanced accuracy (rows lr, columns T):
 | 0.3 | +0.024 | +0.023 | +0.016 | +0.017 | +0.016 |
 | 1.0 | +0.085 | +0.078 | +0.069 | +0.042 | +0.033 |
 
-FedAvg − pooled, AUC (rows lr, columns T):
+FedAvg − pooled, AUC (rows lr, columns K):
 
-| lr | T=1 | T=5 | T=25 | T=100 | T=500 |
+| lr | K=1 | K=5 | K=25 | K=100 | K=500 |
 |---|---|---|---|---|---|
 | 0.003 | +0.000 | +0.000 | +0.000 | +0.000 | +0.000 |
 | 0.01 | -0.000 | -0.000 | -0.000 | +0.000 | +0.001 |

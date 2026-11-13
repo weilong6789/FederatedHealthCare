@@ -1,14 +1,14 @@
-"""Figures for the FedAvg local-steps (T) sweep on ISIC.
+"""Figures for the FedAvg local-steps (K) sweep on ISIC.
 
-    python plot_T_sweep.py              # reads and writes results/
-    python plot_T_sweep.py results40    # another results folder
+    python plot_K_sweep.py              # reads and writes results/
+    python plot_K_sweep.py results40    # another results folder
 
 Only runs that finished (wrote final predictions) are used, so a job that hit
-its time limit doesn't drag down its T. Writes:
-    T_final.png       final balanced accuracy, accuracy and AUC vs T, against pooled
-    T_curves.png      balanced accuracy vs epochs, one panel per T, pooled for reference
-    T_hospitals.png   final balanced accuracy at each hospital vs T, against pooled and local
-    T_classes.png     recall of each of the 8 classes, pooled and every T
+its time limit doesn't drag down its K. Writes:
+    K_final.png       final balanced accuracy, accuracy and AUC vs K, against pooled
+    K_curves.png      balanced accuracy vs epochs, one panel per K, pooled for reference
+    K_hospitals.png   final balanced accuracy at each hospital vs K, against pooled and local
+    K_classes.png     recall of each of the 8 classes, pooled and every K
 """
 import sys
 import warnings
@@ -43,11 +43,11 @@ def tidy(ax):
 # ---------------------------------------------------------------- data
 d = pd.read_csv(OUT / "isic.csv", dtype=str)
 d = d[d.method.isin(["pooled", "fedavg", "local"])].copy()
-for c in ["T", "seed", "round", "steps", "epochs", *METRICS]:
+for c in ["K", "seed", "round", "steps", "epochs", *METRICS]:
     d[c] = pd.to_numeric(d[c], errors="coerce")
 d = d.dropna(subset=["seed", "steps", "epochs", *METRICS])
 d["seed"] = d.seed.astype(int)
-d["tag"] = np.where(d.method == "fedavg", "fedavg_T" + d["T"].fillna(0).astype(int).astype(str),
+d["tag"] = np.where(d.method == "fedavg", "fedavg_K" + d["K"].fillna(0).astype(int).astype(str),
                     d.method)
 d = d.drop_duplicates(["tag", "seed", "steps", "client"], keep="last")
 
@@ -65,59 +65,59 @@ if dropped:
     print("left out, no final predictions (unfinished):", dropped)
 d = d[[(t, s) in finished for t, s in zip(d.tag, d.seed)]]
 
-Ts = sorted(int(t[len("fedavg_T"):]) for t in d.tag.unique() if t.startswith("fedavg_T"))
-TAGS = [f"fedavg_T{T}" for T in Ts]
+Ks = sorted(int(t[len("fedavg_K"):]) for t in d.tag.unique() if t.startswith("fedavg_K"))
+TAGS = [f"fedavg_K{K}" for K in Ks]
 BUDGET = int(d[d.tag == "pooled"].steps.max())
-ROUNDS = {T: -(-BUDGET // T) for T in Ts}
+ROUNDS = {K: -(-BUDGET // K) for K in Ks}
 final = d.loc[d.groupby(["tag", "seed", "client"]).steps.idxmax()]
 fin_all = final[final.client == "all"]
 n_seeds = {t: g.seed.nunique() for t, g in fin_all.groupby("tag")}
 
 
 def seed_note():
-    short = [f"T={t[len('fedavg_T'):]}" for t in TAGS if n_seeds.get(t, 0) < max(n_seeds.values())]
+    short = [f"K={t[len('fedavg_K'):]}" for t in TAGS if n_seeds.get(t, 0) < max(n_seeds.values())]
     return f" {', '.join(short)}: fewer seeds (unfinished runs left out)." if short else ""
 
 
-# ---------------------------------------------------------------- 1. final score vs T
+# ---------------------------------------------------------------- 1. final score vs K
 fig, axes = plt.subplots(1, 3, figsize=(13, 4))
 for ax, (m, name) in zip(axes, METRICS.items()):
     pm, ps = fin_all[fin_all.tag == "pooled"][m].agg(["mean", "std"])
     ax.axhspan(pm - ps, pm + ps, color=POOLED, alpha=0.12, lw=0)
     ax.axhline(pm, color=POOLED, ls="--", lw=1.5, label="pooled")
     g = fin_all[fin_all.tag.isin(TAGS)]
-    ax.scatter(g["T"], g[m], s=14, color=FEDAVG, alpha=0.35, lw=0, label="FedAvg, each seed")
-    mean = g.groupby("T")[m].mean().loc[Ts]
-    ax.plot(Ts, mean, color=FEDAVG, lw=2, marker="o", ms=6, label="FedAvg, mean")
+    ax.scatter(g["K"], g[m], s=14, color=FEDAVG, alpha=0.35, lw=0, label="FedAvg, each seed")
+    mean = g.groupby("K")[m].mean().loc[Ks]
+    ax.plot(Ks, mean, color=FEDAVG, lw=2, marker="o", ms=6, label="FedAvg, mean")
     ax.set_xscale("log")
-    ax.set_xlabel("local steps per round, T (log scale)")
+    ax.set_xlabel("local steps per round, K (log scale)")
     ax.set_title(f"{name}, all 4650 test images")
     top = ax.secondary_xaxis("top")
-    # T values that don't divide the budget (e.g. 100 next to 97) would crowd the labels
-    even = [T for T in Ts if BUDGET % T == 0] or Ts
-    top.set_xticks(even, [str(ROUNDS[T]) for T in even], fontsize=8)
+    # K values that don't divide the budget (e.g. 100 next to 97) would crowd the labels
+    even = [K for K in Ks if BUDGET % K == 0] or Ks
+    top.set_xticks(even, [str(ROUNDS[K]) for K in even], fontsize=8)
     top.tick_params(length=0, colors=MUTED)
     top.set_xlabel("rounds", fontsize=8.5, color=MUTED)
     tidy(ax)
-best = int(fin_all[fin_all.tag.isin(TAGS)].groupby("T").balanced_accuracy.mean().idxmax())
-axes[0].annotate(f"best: T={best}", (best, fin_all[fin_all["T"] == best].balanced_accuracy.mean()),
+best = int(fin_all[fin_all.tag.isin(TAGS)].groupby("K").balanced_accuracy.mean().idxmax())
+axes[0].annotate(f"best: K={best}", (best, fin_all[fin_all["K"] == best].balanced_accuracy.mean()),
                  xytext=(0, -16), textcoords="offset points", ha="center", fontsize=9, color=INK)
 axes[0].legend(frameon=False, fontsize=8.5, loc="lower center")
 fig.text(0.01, 0.01, f"Final model after {BUDGET} steps for every run. Pooled: dashed line, band "
          f"± 1 std over seeds.{seed_note()}", fontsize=8.5, color=MUTED)
 fig.tight_layout(rect=(0, 0.04, 1, 1))
-fig.savefig(OUT / "T_final.png", dpi=200)
+fig.savefig(OUT / "K_final.png", dpi=200)
 plt.close(fig)
 
-# ---------------------------------------------------------------- 2. curves, one panel per T
+# ---------------------------------------------------------------- 2. curves, one panel per K
 a = d[d.client == "all"].copy()
 a["ep"] = a.epochs.round(1)
 pooled_curve = a[a.tag == "pooled"].groupby("ep").balanced_accuracy.mean()
 ncol = 4
-nrow = -(-len(Ts) // ncol)
+nrow = -(-len(Ks) // ncol)
 fig, axes = plt.subplots(nrow, ncol, figsize=(3.3 * ncol, 2.7 * nrow), sharex=True, sharey=True)
 axes = np.atleast_1d(axes).ravel()
-for ax, T, tag in zip(axes, Ts, TAGS):
+for ax, K, tag in zip(axes, Ks, TAGS):
     ax.plot(pooled_curve.index, pooled_curve, color=POOLED, ls="--", lw=1.3, label="pooled")
     g = a[a.tag == tag].groupby("ep").balanced_accuracy.agg(["mean", "std"])
     few = len(g) < 8
@@ -125,9 +125,9 @@ for ax, T, tag in zip(axes, Ts, TAGS):
                     alpha=0.18, lw=0)
     ax.plot(g.index, g["mean"], color=FEDAVG, lw=2, marker="o" if few else None, ms=5,
             ls=":" if few else "-", label="FedAvg")
-    ax.set_title(f"T={T}  ({ROUNDS[T]} round{'s' if ROUNDS[T] > 1 else ''})")
+    ax.set_title(f"K={K}  ({ROUNDS[K]} round{'s' if ROUNDS[K] > 1 else ''})")
     tidy(ax)
-for ax in axes[len(Ts):]:
+for ax in axes[len(Ks):]:
     ax.axis("off")
 for ax in axes[::ncol]:
     ax.set_ylabel("balanced accuracy")
@@ -138,7 +138,7 @@ fig.text(0.01, 0.01, "All 4650 test images; mean over seeds, band ± 1 std. FedA
          "the end of each round, so runs with few rounds have few points (dotted).",
          fontsize=8.5, color=MUTED)
 fig.tight_layout(rect=(0, 0.035, 1, 1))
-fig.savefig(OUT / "T_curves.png", dpi=200)
+fig.savefig(OUT / "K_curves.png", dpi=200)
 plt.close(fig)
 
 
@@ -159,22 +159,22 @@ for ax, c in zip(axes.ravel(), sorted(hosp.client.unique())):
         v = h[h.method == tag].bal.mean()
         ax.axhline(v, color=color, ls=ls, lw=1.6, label=label)
     f = h[h.method.isin(TAGS)].copy()
-    f["T"] = f.method.str[len("fedavg_T"):].astype(int)
-    m = f.groupby("T").bal.mean().loc[Ts]
-    ax.plot(Ts, m, color=FEDAVG, lw=2, marker="o", ms=5, label="FedAvg")
+    f["K"] = f.method.str[len("fedavg_K"):].astype(int)
+    m = f.groupby("K").bal.mean().loc[Ks]
+    ax.plot(Ks, m, color=FEDAVG, lw=2, marker="o", ms=5, label="FedAvg")
     ax.set_xscale("log")
     ax.set_title(f"hospital {c}  ({n_test[c]} test images)")
     tidy(ax)
 for ax in axes[:, 0]:
     ax.set_ylabel("balanced accuracy")
 for ax in axes[-1]:
-    ax.set_xlabel("local steps per round, T")
+    ax.set_xlabel("local steps per round, K")
 axes[0, 0].legend(frameon=False, fontsize=8.5, loc="lower center")
 fig.text(0.01, 0.01, "Final model, mean over seeds, each hospital's own test set. Balanced "
          "accuracy averages recall over the classes present at that hospital.",
          fontsize=8.5, color=MUTED)
 fig.tight_layout(rect=(0, 0.035, 1, 1))
-fig.savefig(OUT / "T_hospitals.png", dpi=200)
+fig.savefig(OUT / "K_hospitals.png", dpi=200)
 plt.close(fig)
 
 # ---------------------------------------------------------------- 4. per-class recall
@@ -192,7 +192,7 @@ for i in range(rec.shape[0]):
         v = rec.iat[i, j]
         ax.text(j, i, f"{v:.2f}", ha="center", va="center", fontsize=8.5,
                 color="white" if v > 0.6 else INK)
-ax.set_xticks(range(len(cols)), ["pooled", *[f"T={T}" for T in Ts]])
+ax.set_xticks(range(len(cols)), ["pooled", *[f"K={K}" for K in Ks]])
 ax.set_yticks(range(8), [f"{k} {CLASSES[k]} ({share[k]:.0%})" for k in rec.index])
 ax.axvline(0.5, color="white", lw=3)
 ax.tick_params(length=0)
@@ -205,8 +205,8 @@ cb.set_label("recall", color=MUTED)
 fig.text(0.01, 0.01, "Final model, mean over seeds. Balanced accuracy is the mean of each column.",
          fontsize=8.5, color=MUTED)
 fig.tight_layout(rect=(0, 0.04, 1, 1))
-fig.savefig(OUT / "T_classes.png", dpi=200)
+fig.savefig(OUT / "K_classes.png", dpi=200)
 plt.close(fig)
 
 print("wrote", ", ".join(str(OUT / f) for f in
-                         ["T_final.png", "T_curves.png", "T_hospitals.png", "T_classes.png"]))
+                         ["K_final.png", "K_curves.png", "K_hospitals.png", "K_classes.png"]))

@@ -103,8 +103,8 @@ under `[tool.flwr.app.config]`): `num-server-rounds`, `local-epochs`, `lr`,
 | `fltab/client_app.py` | hospital side: load global weights, train locally, send weights back |
 | `fltab/server_app.py` | coordinator: hand out weights, average what comes back, evaluate, repeat |
 | `baselines.py` | the `pooled` and `local` comparisons. No Flower. |
-| `local_steps.py` | FedAvg with T local SGD steps per round vs pooled, same step budget |
-| `lr_T_grid.py` | FedAvg − pooled over a learning rate × T grid |
+| `local_steps.py` | FedAvg with K local SGD steps per round vs pooled, same step budget |
+| `lr_K_grid.py` | FedAvg − pooled over a learning rate × K grid |
 | `OPACUS_HANDOFF.md` | where DP-SGD (Opacus) plugs into this code |
 | `tune.py` | picks each method's learning rate (and FedAvg's local epochs) on a validation split |
 | `summarize.py` | turns `results/results.csv` into `results/summary.md` and plots per metric |
@@ -114,38 +114,38 @@ under `[tool.flwr.app.config]`): `num-server-rounds`, `local-epochs`, `lr`,
 
 `results/summary.md` is generated: edit `summarize.py`, not the file.
 
-## Local steps T vs pooled
+## Local steps K vs pooled
 
 ```bash
-python local_steps.py      # T = 1 ... 2440, 20 epochs, seeds 0-4 (~8 min)
+python local_steps.py      # K = 1 ... 2440, 20 epochs, seeds 0-4 (~8 min)
 ```
 
-FedAvg where each hospital takes T minibatch SGD steps per round (not
+FedAvg where each hospital takes K minibatch SGD steps per round (not
 epochs), compared with pooled training on the same budget: every run takes
 the same number of SGD steps (20 pooled-equivalent epochs = 20 × 122 steps),
-so FedAvg with T steps runs budget / T rounds. With T = 1 the server's
+so FedAvg with K steps runs budget / K rounds. With K = 1 the server's
 average is one SGD step on a gradient averaged over all hospitals, which is
-pooled SGD with a bigger batch; larger T lets each hospital drift toward its
+pooled SGD with a bigger batch; larger K lets each hospital drift toward its
 own data between averages but needs far fewer rounds. Same lr for every run
-(`--lr`, default 0.003), so T is the only thing that changes.
+(`--lr`, default 0.003), so K is the only thing that changes.
 
 The default sweep covers the two endpoints and 10 values between them, spaced
-evenly on a log scale. Each T divides the 2440-step budget, so every run takes
+evenly on a log scale. Each K divides the 2440-step budget, so every run takes
 exactly the same number of steps:
 
-| T | 1 | 2 | 4 | 8 | 20 | 40 | 61 | 122 | 305 | 610 | 1220 | 2440 |
+| K | 1 | 2 | 4 | 8 | 20 | 40 | 61 | 122 | 305 | 610 | 1220 | 2440 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | rounds | 2440 | 1220 | 610 | 305 | 122 | 61 | 40 | 20 | 8 | 4 | 2 | 1 |
 
-T = 1 is pooled SGD with a bigger batch. T = 2440 is a single round: each
+K = 1 is pooled SGD with a bigger batch. K = 2440 is a single round: each
 hospital trains alone for the whole budget (Switzerland's 30 patients get about
 300 passes), and the server averages the four models once at the end. A
-different `--epochs` picks its own divisors; `--Ts` overrides the list.
+different `--epochs` picks its own divisors; `--Ks` overrides the list.
 
 The budget is 20 epochs because that's where pooled has finished: in the
 earlier 50-epoch run its test balanced accuracy peaked at 0.746 around epoch
 10-15 and slid to 0.734 by 50. Training past that only adds overfitting on top
-of whatever T changes.
+of whatever K changes.
 
 Pooled here is not quite `baselines.py`'s pooled. FLamby scales features with
 each hospital's own mean/std, but with `pooled=True` it uses all hospitals'
@@ -155,25 +155,25 @@ both are scored on the 254 test patients scaled per hospital
 (`pooled_steps` and `all_patients_test` in `fltab/harness.py`).
 
 Outputs in `results/`: `local_steps_curve_<metric>.png` (score vs epochs, one
-line per T, pooled dashed), `local_steps_rounds_<metric>.png` (score vs
+line per K, pooled dashed), `local_steps_rounds_<metric>.png` (score vs
 communication rounds), `local_steps_tradeoff.png` (final score and rounds
-needed vs T), `local_steps.md` (table) and `local_steps.csv` (raw).
+needed vs K), `local_steps.md` (table) and `local_steps.csv` (raw).
 Each final model is also scored on every hospital's own test set
 (`local_steps_hospitals.png`, `local_steps_hospitals.csv`, tables at the end
-of `local_steps.md`), to check whether a large T leaves one hospital behind
+of `local_steps.md`), to check whether a large K leaves one hospital behind
 even when the overall score holds.
-Try `--lr 0.1` too: drift grows with lr × T, so a large lr is where a gap
+Try `--lr 0.1` too: drift grows with lr × K, so a large lr is where a gap
 from pooled would show first.
 
-### Learning rate × T grid
+### Learning rate × K grid
 
 ```bash
-python lr_T_grid.py        # lr 0.003-1.0 × T 1-500, 20 epochs, seeds 0-2 (~30 min)
+python lr_K_grid.py        # lr 0.003-1.0 × K 1-500, 20 epochs, seeds 0-2 (~30 min)
 ```
 
 Heatmap of FedAvg's final score minus pooled's, same lr and step budget in
-each cell (`results/lr_T_grid_<metric>.png`, table in `lr_T_grid.md`). Drift
-grows with lr × T, so this shows where "FedAvg ≈ pooled" stops holding. The
+each cell (`results/lr_K_grid_<metric>.png`, table in `lr_K_grid.md`). Drift
+grows with lr × K, so this shows where "FedAvg ≈ pooled" stops holding. The
 table also lists pooled's own score per lr, since a very large lr can break
 pooled too.
 

@@ -4,7 +4,7 @@
 
 Balanced accuracy:
 
-| hospital | test n | local | pooled | fedavg T=1 | fedavg T=5 | fedavg T=20 | fedavg T=97 | fedavg T=100 | fedavg T=291 | fedavg T=970 | fedavg T=5820 |
+| hospital | test n | local | pooled | fedavg K=1 | fedavg K=5 | fedavg K=20 | fedavg K=97 | fedavg K=100 | fedavg K=291 | fedavg K=970 | fedavg K=5820 |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | 0 | 2483 | 0.763 ± 0.023 | 0.753 ± 0.009 | 0.501 ± 0.039 | 0.567 ± 0.034 | 0.658 ± 0.026 | 0.748 ± 0.015 | 0.737 ± 0.003 | 0.775 ± 0.015 | 0.752 ± 0.047 | 0.364 ± 0.048 |
 | 1 | 791 | 0.719 ± 0.032 | 0.689 ± 0.031 | 0.611 ± 0.018 | 0.573 ± 0.060 | 0.645 ± 0.014 | 0.671 ± 0.007 | 0.645 ± 0.014 | 0.708 ± 0.030 | 0.687 ± 0.023 | 0.362 ± 0.040 |
@@ -16,7 +16,7 @@ Balanced accuracy:
 
 Accuracy:
 
-| hospital | test n | local | pooled | fedavg T=1 | fedavg T=5 | fedavg T=20 | fedavg T=97 | fedavg T=100 | fedavg T=291 | fedavg T=970 | fedavg T=5820 |
+| hospital | test n | local | pooled | fedavg K=1 | fedavg K=5 | fedavg K=20 | fedavg K=97 | fedavg K=100 | fedavg K=291 | fedavg K=970 | fedavg K=5820 |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | 0 | 2483 | 0.737 ± 0.041 | 0.744 ± 0.023 | 0.653 ± 0.040 | 0.705 ± 0.006 | 0.736 ± 0.013 | 0.776 ± 0.006 | 0.776 ± 0.008 | 0.769 ± 0.018 | 0.734 ± 0.056 | 0.325 ± 0.040 |
 | 1 | 791 | 0.962 ± 0.026 | 0.954 ± 0.016 | 0.962 ± 0.005 | 0.952 ± 0.010 | 0.956 ± 0.019 | 0.958 ± 0.009 | 0.966 ± 0.003 | 0.942 ± 0.027 | 0.898 ± 0.031 | 0.442 ± 0.183 |
@@ -28,7 +28,7 @@ Accuracy:
 
 AUC:
 
-| hospital | test n | local | pooled | fedavg T=1 | fedavg T=5 | fedavg T=20 | fedavg T=97 | fedavg T=100 | fedavg T=291 | fedavg T=970 | fedavg T=5820 |
+| hospital | test n | local | pooled | fedavg K=1 | fedavg K=5 | fedavg K=20 | fedavg K=97 | fedavg K=100 | fedavg K=291 | fedavg K=970 | fedavg K=5820 |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | 0 | 2483 | 0.957 ± 0.008 | 0.957 ± 0.003 | 0.924 ± 0.003 | 0.923 ± 0.009 | 0.950 ± 0.006 | 0.967 ± 0.005 | 0.966 ± 0.001 | 0.966 ± 0.004 | 0.964 ± 0.008 | 0.866 ± 0.003 |
 | 1 | 791 | 0.950 ± 0.013 | 0.965 ± 0.015 | 0.906 ± 0.024 | 0.927 ± 0.025 | 0.932 ± 0.029 | 0.926 ± 0.044 | 0.920 ± 0.031 | 0.917 ± 0.016 | 0.907 ± 0.017 | 0.807 ± 0.010 |
@@ -57,30 +57,30 @@ Test images resampled with replacement within each hospital, 1000 times; both me
 
 | run | metric | FedAvg − pooled [95% CI] |
 |---|---|---|
-| fedavg T=1 | balanced accuracy | -0.263 [-0.283, -0.243]* |
-| fedavg T=1 | accuracy | -0.076 [-0.088, -0.065]* |
-| fedavg T=1 | AUC | -0.044 [-0.050, -0.037]* |
-| fedavg T=5 | balanced accuracy | -0.210 [-0.230, -0.191]* |
-| fedavg T=5 | accuracy | -0.040 [-0.050, -0.030]* |
-| fedavg T=5 | AUC | -0.043 [-0.051, -0.035]* |
-| fedavg T=20 | balanced accuracy | -0.139 [-0.158, -0.121]* |
-| fedavg T=20 | accuracy | -0.016 [-0.026, -0.006]* |
-| fedavg T=20 | AUC | -0.022 [-0.028, -0.016]* |
-| fedavg T=97 | balanced accuracy | -0.060 [-0.076, -0.044]* |
-| fedavg T=97 | accuracy | +0.009 [-0.001, +0.018] |
-| fedavg T=97 | AUC | -0.007 [-0.011, -0.004]* |
-| fedavg T=100 | balanced accuracy | -0.064 [-0.081, -0.047]* |
-| fedavg T=100 | accuracy | +0.009 [-0.001, +0.018] |
-| fedavg T=100 | AUC | -0.007 [-0.011, -0.004]* |
-| fedavg T=291 | balanced accuracy | -0.034 [-0.051, -0.018]* |
-| fedavg T=291 | accuracy | -0.003 [-0.012, +0.006] |
-| fedavg T=291 | AUC | -0.010 [-0.014, -0.006]* |
-| fedavg T=970 | balanced accuracy | -0.066 [-0.083, -0.049]* |
-| fedavg T=970 | accuracy | -0.044 [-0.054, -0.034]* |
-| fedavg T=970 | AUC | -0.016 [-0.020, -0.013]* |
-| fedavg T=5820 | balanced accuracy | -0.398 [-0.416, -0.379]* |
-| fedavg T=5820 | accuracy | -0.403 [-0.416, -0.390]* |
-| fedavg T=5820 | AUC | -0.101 [-0.106, -0.096]* |
+| fedavg K=1 | balanced accuracy | -0.263 [-0.283, -0.243]* |
+| fedavg K=1 | accuracy | -0.076 [-0.088, -0.065]* |
+| fedavg K=1 | AUC | -0.044 [-0.050, -0.037]* |
+| fedavg K=5 | balanced accuracy | -0.210 [-0.230, -0.191]* |
+| fedavg K=5 | accuracy | -0.040 [-0.050, -0.030]* |
+| fedavg K=5 | AUC | -0.043 [-0.051, -0.035]* |
+| fedavg K=20 | balanced accuracy | -0.139 [-0.158, -0.121]* |
+| fedavg K=20 | accuracy | -0.016 [-0.026, -0.006]* |
+| fedavg K=20 | AUC | -0.022 [-0.028, -0.016]* |
+| fedavg K=97 | balanced accuracy | -0.060 [-0.076, -0.044]* |
+| fedavg K=97 | accuracy | +0.009 [-0.001, +0.018] |
+| fedavg K=97 | AUC | -0.007 [-0.011, -0.004]* |
+| fedavg K=100 | balanced accuracy | -0.064 [-0.081, -0.047]* |
+| fedavg K=100 | accuracy | +0.009 [-0.001, +0.018] |
+| fedavg K=100 | AUC | -0.007 [-0.011, -0.004]* |
+| fedavg K=291 | balanced accuracy | -0.034 [-0.051, -0.018]* |
+| fedavg K=291 | accuracy | -0.003 [-0.012, +0.006] |
+| fedavg K=291 | AUC | -0.010 [-0.014, -0.006]* |
+| fedavg K=970 | balanced accuracy | -0.066 [-0.083, -0.049]* |
+| fedavg K=970 | accuracy | -0.044 [-0.054, -0.034]* |
+| fedavg K=970 | AUC | -0.016 [-0.020, -0.013]* |
+| fedavg K=5820 | balanced accuracy | -0.398 [-0.416, -0.379]* |
+| fedavg K=5820 | accuracy | -0.403 [-0.416, -0.390]* |
+| fedavg K=5820 | AUC | -0.101 [-0.106, -0.096]* |
 
 ## Still improving at epoch 20? (all test images)
 
@@ -91,46 +91,46 @@ Final score, and the gain per 10 epochs from a straight-line fit to each seed's 
 | pooled | balanced accuracy | 0.748 ± 0.006 | +0.025 | 2/3 up |
 | pooled | accuracy | 0.771 ± 0.020 | +0.040 | 3/3 up |
 | pooled | AUC | 0.962 ± 0.003 | +0.009 | 3/3 up |
-| fedavg T=1 | balanced accuracy | 0.485 ± 0.034 | +0.074 | 3/3 up |
-| fedavg T=1 | accuracy | 0.695 ± 0.031 | +0.030 | 3/3 up |
-| fedavg T=1 | AUC | 0.919 ± 0.011 | +0.024 | 3/3 up |
-| fedavg T=5 | balanced accuracy | 0.538 ± 0.043 | -0.011 | 1/3 up |
-| fedavg T=5 | accuracy | 0.731 ± 0.012 | +0.004 | 2/3 up |
-| fedavg T=5 | AUC | 0.919 ± 0.008 | -0.003 | 1/3 up |
-| fedavg T=20 | balanced accuracy | 0.609 ± 0.029 | +0.002 | 1/3 up |
-| fedavg T=20 | accuracy | 0.755 ± 0.010 | +0.018 | 3/3 up |
-| fedavg T=20 | AUC | 0.940 ± 0.003 | +0.004 | 3/3 up |
-| fedavg T=97 | balanced accuracy | 0.689 ± 0.013 | -0.006 | 1/3 up |
-| fedavg T=97 | accuracy | 0.780 ± 0.007 | +0.020 | 3/3 up |
-| fedavg T=97 | AUC | 0.954 ± 0.002 | +0.003 | 3/3 up |
-| fedavg T=100 | balanced accuracy | 0.684 ± 0.006 | +0.007 | 2/3 up |
-| fedavg T=100 | accuracy | 0.780 ± 0.004 | +0.022 | 3/3 up |
-| fedavg T=100 | AUC | 0.955 ± 0.003 | +0.006 | 3/3 up |
-| fedavg T=291 | balanced accuracy | 0.714 ± 0.014 | +0.013 | 2/3 up |
-| fedavg T=291 | accuracy | 0.768 ± 0.006 | +0.028 | 3/3 up |
-| fedavg T=291 | AUC | 0.952 ± 0.001 | +0.009 | 3/3 up |
-| fedavg T=970 | balanced accuracy | 0.682 ± 0.039 | -0.017 | 2/3 up |
-| fedavg T=970 | accuracy | 0.727 ± 0.032 | +0.012 | 2/3 up |
-| fedavg T=970 | AUC | 0.945 ± 0.005 | +0.005 | 2/3 up |
-| fedavg T=5820 | balanced accuracy | 0.350 ± 0.038 | - | - |
-| fedavg T=5820 | accuracy | 0.369 ± 0.058 | - | - |
-| fedavg T=5820 | AUC | 0.861 ± 0.004 | - | - |
+| fedavg K=1 | balanced accuracy | 0.485 ± 0.034 | +0.074 | 3/3 up |
+| fedavg K=1 | accuracy | 0.695 ± 0.031 | +0.030 | 3/3 up |
+| fedavg K=1 | AUC | 0.919 ± 0.011 | +0.024 | 3/3 up |
+| fedavg K=5 | balanced accuracy | 0.538 ± 0.043 | -0.011 | 1/3 up |
+| fedavg K=5 | accuracy | 0.731 ± 0.012 | +0.004 | 2/3 up |
+| fedavg K=5 | AUC | 0.919 ± 0.008 | -0.003 | 1/3 up |
+| fedavg K=20 | balanced accuracy | 0.609 ± 0.029 | +0.002 | 1/3 up |
+| fedavg K=20 | accuracy | 0.755 ± 0.010 | +0.018 | 3/3 up |
+| fedavg K=20 | AUC | 0.940 ± 0.003 | +0.004 | 3/3 up |
+| fedavg K=97 | balanced accuracy | 0.689 ± 0.013 | -0.006 | 1/3 up |
+| fedavg K=97 | accuracy | 0.780 ± 0.007 | +0.020 | 3/3 up |
+| fedavg K=97 | AUC | 0.954 ± 0.002 | +0.003 | 3/3 up |
+| fedavg K=100 | balanced accuracy | 0.684 ± 0.006 | +0.007 | 2/3 up |
+| fedavg K=100 | accuracy | 0.780 ± 0.004 | +0.022 | 3/3 up |
+| fedavg K=100 | AUC | 0.955 ± 0.003 | +0.006 | 3/3 up |
+| fedavg K=291 | balanced accuracy | 0.714 ± 0.014 | +0.013 | 2/3 up |
+| fedavg K=291 | accuracy | 0.768 ± 0.006 | +0.028 | 3/3 up |
+| fedavg K=291 | AUC | 0.952 ± 0.001 | +0.009 | 3/3 up |
+| fedavg K=970 | balanced accuracy | 0.682 ± 0.039 | -0.017 | 2/3 up |
+| fedavg K=970 | accuracy | 0.727 ± 0.032 | +0.012 | 2/3 up |
+| fedavg K=970 | AUC | 0.945 ± 0.005 | +0.005 | 2/3 up |
+| fedavg K=5820 | balanced accuracy | 0.350 ± 0.038 | - | - |
+| fedavg K=5820 | accuracy | 0.369 ± 0.058 | - | - |
+| fedavg K=5820 | AUC | 0.861 ± 0.004 | - | - |
 
-## FedAvg local steps per round (T), all test images
+## FedAvg local steps per round (K), all test images
 
-Final score, mean ± std over seeds. Rounds = steps / T, so T = 1 averages after every step and the largest T averages once at the end. T values that don't divide the budget run a few extra steps (see `steps`).
+Final score, mean ± std over seeds. Rounds = steps / K, so K = 1 averages after every step and the largest K averages once at the end. K values that don't divide the budget run a few extra steps (see `steps`).
 
 | run | rounds | steps | balanced accuracy | accuracy | AUC |
 |---|---|---|---|---|---|
 | pooled | - | 5820 | 0.748 ± 0.006 | 0.771 ± 0.020 | 0.962 ± 0.003 |
-| fedavg T=1 | 5820 | 5820 | 0.485 ± 0.034 | 0.695 ± 0.031 | 0.919 ± 0.011 |
-| fedavg T=5 | 1164 | 5820 | 0.538 ± 0.043 | 0.731 ± 0.012 | 0.919 ± 0.008 |
-| fedavg T=20 | 291 | 5820 | 0.609 ± 0.029 | 0.755 ± 0.010 | 0.940 ± 0.003 |
-| fedavg T=97 | 60 | 5820 | 0.689 ± 0.013 | 0.780 ± 0.007 | 0.954 ± 0.002 |
-| fedavg T=100 | 59 | 5900 | 0.684 ± 0.006 | 0.780 ± 0.004 | 0.955 ± 0.003 |
-| fedavg T=291 | 20 | 5820 | 0.714 ± 0.014 | 0.768 ± 0.006 | 0.952 ± 0.001 |
-| fedavg T=970 | 6 | 5820 | 0.682 ± 0.039 | 0.727 ± 0.032 | 0.945 ± 0.005 |
-| fedavg T=5820 | 1 | 5820 | 0.350 ± 0.038 | 0.369 ± 0.058 | 0.861 ± 0.004 |
+| fedavg K=1 | 5820 | 5820 | 0.485 ± 0.034 | 0.695 ± 0.031 | 0.919 ± 0.011 |
+| fedavg K=5 | 1164 | 5820 | 0.538 ± 0.043 | 0.731 ± 0.012 | 0.919 ± 0.008 |
+| fedavg K=20 | 291 | 5820 | 0.609 ± 0.029 | 0.755 ± 0.010 | 0.940 ± 0.003 |
+| fedavg K=97 | 60 | 5820 | 0.689 ± 0.013 | 0.780 ± 0.007 | 0.954 ± 0.002 |
+| fedavg K=100 | 59 | 5900 | 0.684 ± 0.006 | 0.780 ± 0.004 | 0.955 ± 0.003 |
+| fedavg K=291 | 20 | 5820 | 0.714 ± 0.014 | 0.768 ± 0.006 | 0.952 ± 0.001 |
+| fedavg K=970 | 6 | 5820 | 0.682 ± 0.039 | 0.727 ± 0.032 | 0.945 ± 0.005 |
+| fedavg K=5820 | 1 | 5820 | 0.350 ± 0.038 | 0.369 ± 0.058 | 0.861 ± 0.004 |
 
 ## Run settings
 
@@ -138,11 +138,11 @@ Final score, mean ± std over seeds. Rounds = steps / T, so T = 1 averages after
 |---|---|---|---|---|---|
 | local | 0, 1, 2 | adam | 0.0005 | 20.0 | 6 |
 | pooled | 0, 1, 2 | adam | 0.0005 | 20.0 | 5 |
-| fedavg T=1 | 0, 1, 2 | adam | 0.0005 | 20.0 | 59 |
-| fedavg T=5 | 0, 1, 2 | adam | 0.0005 | 20.0 | 68 |
-| fedavg T=20 | 0, 1, 2 | adam | 0.0005 | 20.0 | 85 |
-| fedavg T=97 | 0, 1, 2 | adam | 0.0005 | 20.0 | 97 |
-| fedavg T=100 | 0, 1, 2 | adam | 0.0005 | 20.3 | 84 |
-| fedavg T=291 | 0, 1, 2 | adam | 0.0005 | 20.0 | 93 |
-| fedavg T=970 | 0, 1, 2 | adam | 0.0005 | 20.0 | 91 |
-| fedavg T=5820 | 0, 1, 2 | adam | 0.0005 | 20.0 | 84 |
+| fedavg K=1 | 0, 1, 2 | adam | 0.0005 | 20.0 | 59 |
+| fedavg K=5 | 0, 1, 2 | adam | 0.0005 | 20.0 | 68 |
+| fedavg K=20 | 0, 1, 2 | adam | 0.0005 | 20.0 | 85 |
+| fedavg K=97 | 0, 1, 2 | adam | 0.0005 | 20.0 | 97 |
+| fedavg K=100 | 0, 1, 2 | adam | 0.0005 | 20.3 | 84 |
+| fedavg K=291 | 0, 1, 2 | adam | 0.0005 | 20.0 | 93 |
+| fedavg K=970 | 0, 1, 2 | adam | 0.0005 | 20.0 | 91 |
+| fedavg K=5820 | 0, 1, 2 | adam | 0.0005 | 20.0 | 84 |

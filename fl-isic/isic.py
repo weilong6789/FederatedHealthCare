@@ -1,7 +1,7 @@
 """Pooled, local and FedAvg on FLamby's Fed-ISIC2019, on one GPU.
 
     python isic.py --method pooled --seed 0
-    python isic.py --method fedavg --T 100 --seed 0
+    python isic.py --method fedavg --K 100 --seed 0
     python isic.py --method local --seed 0
     python isic.py --method pooled --epochs 1 --max-images 512    # quick smoke test
 
@@ -11,8 +11,8 @@ ImageNet, weighted focal loss, batch 64, random crops of 200 px.
 
 Training budget is counted in pooled-equivalent epochs, as in
 fl-tabular/local_steps.py: one epoch = the SGD steps one pass over the pooled
-training data takes. Pooled runs that many steps. FedAvg runs budget / T
-rounds; each round every hospital starts from the global model, takes T steps
+training data takes. Pooled runs that many steps. FedAvg runs budget / K
+rounds; each round every hospital starts from the global model, takes K steps
 on its own data, and the server averages the six models weighted by hospital
 size. Local trains one model per hospital for --epochs passes over its own
 data only.
@@ -47,7 +47,7 @@ p = argparse.ArgumentParser()
 p.add_argument("--method", choices=["pooled", "fedavg", "local"], required=True)
 p.add_argument("--seed", type=int, default=0)
 p.add_argument("--epochs", type=float, default=20, help="pooled-equivalent epochs (FLamby: 20)")
-p.add_argument("--T", type=int, default=100, help="FedAvg local steps per round")
+p.add_argument("--K", type=int, default=100, help="FedAvg local steps per round")
 p.add_argument("--opt", choices=["adam", "sgd"], default="adam")
 p.add_argument("--lr", type=float, default=LR)
 p.add_argument("--eval-every", type=float, default=1.0, help="evaluate about this often, in epochs")
@@ -64,7 +64,7 @@ args = p.parse_args()
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 OUT = Path(args.out)
 OUT.mkdir(parents=True, exist_ok=True)
-TAG = args.method + (f"_T{args.T}" if args.method == "fedavg" else "")
+TAG = args.method + (f"_K{args.K}" if args.method == "fedavg" else "")
 print(f"{TAG} seed {args.seed} on {DEVICE}"
       + (f" ({torch.cuda.get_device_name()})" if DEVICE.type == "cuda" else ""), flush=True)
 
@@ -172,7 +172,7 @@ def locked(path):
     # closing the file releases the lock
 
 
-FIELDS = ["method", "T", "seed", "round", "steps", "epochs", "client",
+FIELDS = ["method", "K", "seed", "round", "steps", "epochs", "client",
           "accuracy", "balanced_accuracy", "auc", "n", "lr", "opt", "seconds"]
 RESULTS = OUT / "isic.csv"
 T0 = time.time()
@@ -190,7 +190,7 @@ def log(model, round_, steps, epochs, hospitals=range(NUM_CLIENTS), final=False)
         if f.tell() == 0:
             w.writeheader()
         for r in rows:
-            w.writerow({"method": args.method, "T": args.T if args.method == "fedavg" else "",
+            w.writerow({"method": args.method, "K": args.K if args.method == "fedavg" else "",
                         "seed": args.seed, "round": round_, "steps": steps,
                         "epochs": round(epochs, 3), "lr": args.lr, "opt": args.opt,
                         "seconds": round(time.time() - T0), **r})
@@ -231,16 +231,16 @@ elif args.method == "fedavg":
     model = make_model()
     local = make_model()
     its = [batches(train_loader(d, args.seed * 1000 + i)) for i, d in enumerate(TRAIN)]
-    rounds = -(-TOTAL // args.T)
+    rounds = -(-TOTAL // args.K)
     weights = [n / sum(SIZES) for n in SIZES]
-    print(f"{rounds} rounds of {args.T} local steps", flush=True)
+    print(f"{rounds} rounds of {args.K} local steps", flush=True)
     log(model, 0, 0, 0)
     next_eval = EVAL_EVERY
     for r in range(1, rounds + 1):
         avg = None
         for it, wgt in zip(its, weights):
             local.load_state_dict(model.state_dict())
-            train_steps(local, it, make_opt(local), args.T)
+            train_steps(local, it, make_opt(local), args.K)
             sd = local.state_dict()
             if avg is None:
                 avg = {k: v.float() * wgt for k, v in sd.items()}
@@ -250,7 +250,7 @@ elif args.method == "fedavg":
         # BatchNorm's running stats are averaged like the weights; its integer
         # batch counter is cast back to its own type.
         model.load_state_dict({k: v.to(model.state_dict()[k].dtype) for k, v in avg.items()})
-        steps = r * args.T
+        steps = r * args.K
         if steps >= next_eval or r == rounds:
             log(model, r, steps, steps / STEPS_PER_EPOCH, final=r == rounds)
             next_eval = (steps // EVAL_EVERY + 1) * EVAL_EVERY

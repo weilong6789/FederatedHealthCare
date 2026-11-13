@@ -179,9 +179,9 @@ def pooled_steps(seed, lr, total, eval_every=None, on_eval=None):
     return model
 
 
-def fedavg_steps(seed, T, lr, total, eval_every=None, on_eval=None):
-    """FedAvg where every hospital takes T minibatch SGD steps per round, for
-    ceil(total / T) rounds, averaged weighted by hospital size (as Flower's
+def fedavg_steps(seed, K, lr, total, eval_every=None, on_eval=None):
+    """FedAvg where every hospital takes K minibatch SGD steps per round, for
+    ceil(total / K) rounds, averaged weighted by hospital size (as Flower's
     FedAvg does). Same initial model as pooled_steps with the same seed. Calls
     on_eval(round, steps, model) at round 0, at the first round end past each
     multiple of `eval_every` steps, and at the last round."""
@@ -191,7 +191,7 @@ def fedavg_steps(seed, T, lr, total, eval_every=None, on_eval=None):
     its = [batches(dl) for dl in loaders]            # each hospital keeps its place
     sizes = [len(dl.dataset) for dl in loaders]
     local = make_model()
-    rounds = -(-total // T)
+    rounds = -(-total // K)
     if on_eval:
         on_eval(0, 0, model)
     next_eval = eval_every or total
@@ -199,11 +199,11 @@ def fedavg_steps(seed, T, lr, total, eval_every=None, on_eval=None):
         states = []
         for it in its:
             local.load_state_dict(model.state_dict())
-            train_steps(local, it, lr, T)
+            train_steps(local, it, lr, K)
             states.append({k: v.clone() for k, v in local.state_dict().items()})
         model.load_state_dict({k: sum(s[k] * n for s, n in zip(states, sizes)) / sum(sizes)
                                for k in states[0]})
-        steps = r * T
+        steps = r * K
         if on_eval and (steps >= next_eval or r == rounds):
             on_eval(r, steps, model)
             next_eval = (steps // (eval_every or total) + 1) * (eval_every or total)

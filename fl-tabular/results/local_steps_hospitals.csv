@@ -1,4 +1,4 @@
-method,T,seed,client,hospital,accuracy,balanced_accuracy,auc
+method,K,seed,client,hospital,accuracy,balanced_accuracy,auc
 pooled,0,0,0,Cleveland,0.7884615384615384,0.7886904761904762,0.8668154761904762
 pooled,0,0,1,Hungary,0.7752808988764045,0.7965367965367965,0.8771645021645021
 pooled,0,0,2,Switzerland,0.6875,0.8333333333333333,0.9333333333333333

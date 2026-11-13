@@ -10,7 +10,7 @@ All SGD in the project goes through two functions in `fltab/harness.py`:
 | function | used by | trains for |
 |---|---|---|
 | `train_sgd(model, loader, lr, epochs)` | `baselines.py`, `tune.py`, `client_app.py` (Flower FedAvg) | whole epochs |
-| `train_steps(model, batch_iter, lr, steps)` | `pooled_steps` / `fedavg_steps` (used by `local_steps.py`, `lr_T_grid.py`) | a fixed number of minibatch steps |
+| `train_steps(model, batch_iter, lr, steps)` | `pooled_steps` / `fedavg_steps` (used by `local_steps.py`, `lr_K_grid.py`) | a fixed number of minibatch steps |
 
 Both build a fresh `torch.optim.SGD` on every call, which is fine for plain
 SGD (it has no state) but not for Opacus: the privacy accountant lives with

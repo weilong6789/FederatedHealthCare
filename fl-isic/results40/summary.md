@@ -4,7 +4,7 @@
 
 Balanced accuracy:
 
-| hospital | test n | local | pooled | fedavg T=100 |
+| hospital | test n | local | pooled | fedavg K=100 |
 |---|---|---|---|---|
 | 0 | 2483 | 0.754 ± nan | 0.771 ± 0.032 | 0.759 ± 0.020 |
 | 1 | 791 | 0.645 ± nan | 0.751 ± 0.063 | 0.615 ± 0.002 |
@@ -16,7 +16,7 @@ Balanced accuracy:
 
 Accuracy:
 
-| hospital | test n | local | pooled | fedavg T=100 |
+| hospital | test n | local | pooled | fedavg K=100 |
 |---|---|---|---|---|
 | 0 | 2483 | 0.766 ± nan | 0.763 ± 0.029 | 0.809 ± 0.018 |
 | 1 | 791 | 0.850 ± nan | 0.949 ± 0.019 | 0.957 ± 0.014 |
@@ -28,7 +28,7 @@ Accuracy:
 
 AUC:
 
-| hospital | test n | local | pooled | fedavg T=100 |
+| hospital | test n | local | pooled | fedavg K=100 |
 |---|---|---|---|---|
 | 0 | 2483 | 0.962 ± nan | 0.961 ± 0.008 | 0.967 ± 0.003 |
 | 1 | 791 | 0.918 ± nan | 0.965 ± 0.015 | 0.939 ± 0.020 |
@@ -57,9 +57,9 @@ Test images resampled with replacement within each hospital, 1000 times; both me
 
 | run | metric | FedAvg − pooled [95% CI] |
 |---|---|---|
-| fedavg T=100 | balanced accuracy | -0.081 [-0.099, -0.063]* |
-| fedavg T=100 | accuracy | +0.016 [+0.007, +0.026]* |
-| fedavg T=100 | AUC | -0.008 [-0.012, -0.003]* |
+| fedavg K=100 | balanced accuracy | -0.081 [-0.099, -0.063]* |
+| fedavg K=100 | accuracy | +0.016 [+0.007, +0.026]* |
+| fedavg K=100 | AUC | -0.008 [-0.012, -0.003]* |
 
 ## Still improving at epoch 40? (all test images)
 
@@ -70,9 +70,9 @@ Final score, and the gain per 10 epochs from a straight-line fit to each seed's 
 | pooled | balanced accuracy | 0.767 ± 0.031 | +0.007 | 3/3 up |
 | pooled | accuracy | 0.783 ± 0.023 | +0.016 | 3/3 up |
 | pooled | AUC | 0.963 ± 0.007 | +0.003 | 3/3 up |
-| fedavg T=100 | balanced accuracy | 0.686 ± 0.006 | -0.002 | 1/3 up |
-| fedavg T=100 | accuracy | 0.800 ± 0.003 | +0.006 | 3/3 up |
-| fedavg T=100 | AUC | 0.956 ± 0.005 | +0.001 | 2/3 up |
+| fedavg K=100 | balanced accuracy | 0.686 ± 0.006 | -0.002 | 1/3 up |
+| fedavg K=100 | accuracy | 0.800 ± 0.003 | +0.006 | 3/3 up |
+| fedavg K=100 | AUC | 0.956 ± 0.005 | +0.001 | 2/3 up |
 
 ## Run settings
 
@@ -80,4 +80,4 @@ Final score, and the gain per 10 epochs from a straight-line fit to each seed's 
 |---|---|---|---|---|---|
 | local | 2 | adam | 0.0005 | 40.0 | 11 |
 | pooled | 0, 1, 2 | adam | 0.0005 | 40.0 | 11 |
-| fedavg T=100 | 0, 1, 2 | adam | 0.0005 | 40.2 | 168 |
+| fedavg K=100 | 0, 1, 2 | adam | 0.0005 | 40.2 | 168 |
