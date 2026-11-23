@@ -53,7 +53,7 @@ FLamby (Ogier du Terrail et al., NeurIPS 2022 Datasets and Benchmarks) introduce
 | strategies | FedAvg, FedProx, SCAFFOLD, Cyclic, FedAdam, FedYogi, FedAdagrad | FedAvg only, studied in depth |
 | local steps per round | fixed at 100 | swept from 1 step to a single round (7–12 values per dataset) |
 | number of rounds | from budget formula: 15 (heart), 9 (ISIC) | matched to pooled's total steps: e.g. 59 rounds at K = 100 on ISIC |
-| steps the global model gets (ISIC) | ~940: one client's share of the data × 20 epochs, 1/6 of pooled | 5820, same as pooled (each hospital does 6× less data per step than pooled sees, so FedAvg uses 6× pooled's total compute) |
+| steps the global model gets (ISIC) | ~940: one client's share of the data × 20 epochs, 1/6 of pooled | 5820, same as pooled; all 6 hospitals take those steps in parallel, so FedAvg uses 6× pooled's compute |
 | client optimizer | SGD, lr tuned per strategy | same optimizer and lr as pooled (SGD for heart, Adam for ISIC), so K is the only thing that changes |
 | hyperparameter tuning | per strategy | on a held-out validation split, never on test (heart) |
 | metrics | one per dataset (accuracy for heart, balanced accuracy for ISIC) | accuracy, balanced accuracy and AUC everywhere |
