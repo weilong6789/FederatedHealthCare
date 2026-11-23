@@ -29,7 +29,7 @@ How much does FedAvg lose against pooled training, and how does that depend on h
 Methods compared:
 
 - **pooled**: one model trained on all hospitals' data in one place (the upper bound FL is trying to match)
-- **local**: each hospital trains alone on its own data
+- **local**: each hospital trains alone on its own data, then keeps and uses that model itself (scored only on its own test set). Single-round FedAvg is different: the hospitals also train alone, but the server averages their four models into one shared model.
 - **FedAvg**: each hospital trains locally for **K steps**, the server averages the weights, repeat
 
 **K** is local steps per round. Every run takes the same number of SGD steps as pooled, so the number of communication rounds is `budget / K`. K = 1 averages after every step; K = budget is a single round where each hospital trains alone and the server averages once at the end. (The figure files and some result tables still label K as "T", from before the rename.)
