@@ -7,11 +7,14 @@ How much does FedAvg lose against pooled training, and how does that depend on h
 1. [Setup and notation](#setup-and-notation)
 2. [What the FLamby paper did vs what I did](#what-the-flamby-paper-did-vs-what-i-did)
 3. [Heart disease: communication rounds don't matter](#heart-disease-communication-rounds-dont-matter)
-4. [ISIC: communication rounds matter a lot](#isic-communication-rounds-matter-a-lot)
-5. [Which hospitals lose out](#which-hospitals-lose-out)
-6. [Longer training on ISIC (40 epochs)](#longer-training-on-isic-40-epochs)
-7. [Takeaways](#takeaways)
-8. [Open questions and next steps](#open-questions-and-next-steps)
+4. [Heart disease: which patients each hospital gets wrong](#heart-disease-which-patients-each-hospital-gets-wrong)
+5. [ISIC: communication rounds matter a lot](#isic-communication-rounds-matter-a-lot)
+6. [Communication cost](#communication-cost)
+7. [Which hospitals lose out](#which-hospitals-lose-out)
+8. [Longer training on ISIC (40 epochs)](#longer-training-on-isic-40-epochs)
+9. [Compute](#compute)
+10. [Takeaways](#takeaways)
+11. [Open questions and next steps](#open-questions-and-next-steps)
 
 ---
 
@@ -55,13 +58,43 @@ FLamby (Ogier du Terrail et al., NeurIPS 2022 Datasets and Benchmarks) introduce
 | number of rounds | from budget formula: 15 (heart), 9 (ISIC) | matched to pooled's total steps: e.g. 59 rounds at K = 100 on ISIC |
 | steps the global model gets (ISIC) | ~940: one client's share of the data × 20 epochs, 1/6 of pooled | 5820, same as pooled; all 6 hospitals take those steps in parallel, so FedAvg uses 6× pooled's compute |
 | client optimizer | SGD, lr tuned per strategy | same optimizer and lr as pooled (SGD for heart, Adam for ISIC), so K is the only thing that changes |
-| hyperparameter tuning | per strategy | on a held-out validation split, never on test (heart) |
+| hyperparameter tuning | per strategy | heart: on a held-out validation split, never on test; ISIC: none, FLamby's pooled settings for every method |
 | metrics | one per dataset (accuracy for heart, balanced accuracy for ISIC) | accuracy, balanced accuracy and AUC everywhere |
 | uncertainty | mean over repeated runs | seed std plus paired bootstrap CIs over test patients |
 | per-hospital view | yes | yes, plus per-class recall on ISIC |
 | extra experiments | | heart: shrinking the training budget to 2 steps, lr × K grid; ISIC: 40-epoch rerun to check convergence |
 
 FLamby answers "which FL strategy does best at one fixed setting". This project fixes the strategy and asks how the gap to pooled depends on communication frequency and training budget, with intervals tight enough to tell real gaps from noise.
+
+### FLamby's published numbers vs mine
+
+FLamby's numbers are from the benchmark result files in its GitHub repo (`flamby/results/`, 5 seeds), the runs its results plot is drawn from. FLamby reports one metric per dataset: accuracy for heart disease and balanced accuracy for ISIC. It has no AUC, no balanced accuracy for heart disease and no plain accuracy for ISIC.
+
+Heart disease, accuracy (Cleveland / Hungary / Switzerland / Long Beach VA):
+
+| | FLamby | mine |
+|---|---|---|
+| pooled, per hospital | 0.783 / 0.764 / 0.750 / 0.644 | 0.771 / 0.764 / 0.750 / 0.653 |
+| pooled, all patients | 0.795* | 0.746 |
+| FedAvg, per hospital | 0.731 / 0.719 / 0.650 / 0.640 | 0.773 / 0.789 / 0.662 / 0.604 |
+| FedAvg, all patients | 0.748* | 0.742 |
+| local, own hospital | 0.746 / 0.746 / 0.725 / 0.702 | 0.737 / 0.719 / 0.938 / 0.764 |
+
+\* FLamby's all-patients score re-scales features with all hospitals' statistics, so it is not the four hospital scores combined (those add up to 0.756 for pooled). Compare the per-hospital rows.
+
+ISIC, balanced accuracy:
+
+| | FLamby | mine |
+|---|---|---|
+| pooled, all images | 0.762 ± 0.010 | 0.748 ± 0.006 (20 epochs), 0.767 (40 epochs) |
+| FedAvg, K = 100 | 0.534 ± 0.114 | 0.684 ± 0.006 |
+| best FL result | 0.575 (FedAdam) | 0.714 (FedAvg, K = 291) |
+| local, own hospital (0–5) | 0.772 / 0.730 / 0.706 / 0.682 / 0.675 / 0.304 | 0.763 / 0.719 / 0.676 / 0.675 / 0.630 / 0.303 |
+
+- Pooled and local match FLamby closely on both datasets, so the setups agree.
+- The one local difference is Switzerland on heart disease (0.938 vs 0.725): my tuned learning rate (0.1) collapsed that model to calling everyone sick.
+- On heart disease FLamby's FedAvg is below pooled and mine isn't. FLamby runs 15 rounds × 100 steps of SGD at lr 0.001; my budget sweep shows scores dropping when training is that short, so its FedAvg is likely undertrained.
+- On ISIC my FedAvg gap to pooled is −0.06 against FLamby's −0.23, with seed spread 0.006 vs 0.114. My FedAvg gets 6.5× more steps and uses Adam, so FLamby's gap mixes the cost of FL with undertraining.
 
 ---
 
@@ -78,7 +111,7 @@ With every run taking 2440 steps, FedAvg matches pooled at every K, from 2440 ro
 
 Full table: [`fl-tabular/results/local_steps.md`](fl-tabular/results/local_steps.md)
 
-This holds at smaller budgets too. Shrinking the budget from 2440 steps down to 2, FedAvg at every K tracks pooled at the same budget. Scores only start dropping below pooled-at-20-epochs once the budget falls under ~600 steps (about 5 epochs), and they drop identically for pooled and every FedAvg setting.
+This also holds at smaller training budgets. I reran the K sweep at 20 total budgets, from 2440 SGD steps (20 epochs) down to 2 steps (under 2% of one epoch, where the model has barely trained). At every budget, FedAvg at every K scores the same as pooled given that budget. Scores stay at the 20-epoch level down to about 600 steps (5 epochs). Below that they drop, and pooled and every FedAvg setting drop together.
 
 ![Heart disease budget sweep](fl-tabular/results/budget_sweep_balanced_accuracy.png)
 
@@ -86,7 +119,36 @@ Full table: [`fl-tabular/results/budget_sweep.md`](fl-tabular/results/budget_swe
 
 The lr × K grid ([`lr_T_grid.md`](fl-tabular/results/lr_T_grid.md)) shows the same: FedAvg never falls below pooled. At lr ≥ 0.3 FedAvg comes out ahead, because pooled itself degrades at high learning rates.
 
-Why: a 14-parameter logistic regression on features scaled per hospital gives the hospitals very similar optima, so local drift between averages barely moves the result.
+Why FedAvg matches pooled here:
+
+- **One minimum.** Logistic regression has a single optimum, so every seed and every method ends near the same weights.
+- **K = 1 is pooled training.** All hospitals start each round from the same weights, so averaging their one-step updates is exactly one SGD step on the averaged gradient.
+- **Little drift.** Drift grows with lr × K, and at lr 0.003 the hospitals barely move between averages. The lr × K grid only shows FedAvg departing from pooled at lr ≥ 0.3.
+- **Hospitals look alike after scaling.** FLamby scales each hospital's features with its own mean and standard deviation, which removes most site differences. The main difference left is the disease rate, which mostly ends up in the intercept.
+- **The big hospitals carry the average.** It is weighted by training size: Cleveland 41%, Hungary 35%, Long Beach VA 17%, Switzerland 6%. Pooled training gives each hospital the same share, since each patient counts once.
+
+---
+
+## Heart disease: which patients each hospital gets wrong
+
+Generated by [`fl-tabular/patient_errors.py`](fl-tabular/patient_errors.py) from the saved per-patient predictions; full tables in [`fl-tabular/results/patient_errors.md`](fl-tabular/results/patient_errors.md).
+
+**Guessing the dominant label**, against the tuned baselines' test accuracy (mean over 5 seeds):
+
+| hospital | test n | dominant label | guess dominant label | local | pooled | FedAvg |
+|---|---|---|---|---|---|---|
+| Cleveland | 104 | healthy (56/104) | 0.538 | 0.737 | 0.771 | 0.773 |
+| Hungary | 89 | healthy (56/89) | 0.629 | 0.719 | 0.764 | 0.789 |
+| Switzerland | 16 | sick (15/16) | 0.938 | 0.938 | 0.750 | 0.662 |
+| Long Beach VA | 45 | sick (35/45) | 0.778 | 0.764 | 0.653 | 0.604 |
+| all patients | 254 | each hospital's own | 0.638 | 0.748 | 0.746 | 0.742 |
+| all patients | 254 | sick for everyone (131/254) | 0.516 | | | |
+
+**The same patients are wrong every time.** Pooled gives the same result on 250 of 254 patients across 5 seeds. Pooled and FedAvg at K = 1, 8, 61 and 305 miss exactly the same 54 patients in every seed; the single-round run misses 47 of those same 54. These patients are not borderline (on average 0.21 from the 0.5 cutoff): their 13 measurements look like the other class, so the limit is what a linear model can separate, not FL.
+
+**Errors depend on the hospital.** At Switzerland (94% sick) and Long Beach VA (78% sick), nearly all of the shared model's errors are missed disease (4 of 4 and 13 of 15 for pooled). The shared model learns a disease rate dominated by Cleveland and Hungary (about 46% and 37% sick) and under-calls disease there. Their local models make the opposite mistake.
+
+**Pooled is not the same as local.** On all 254 patients they tie on accuracy (0.746 vs 0.748), but pooled is far ahead on balanced accuracy (0.770 vs 0.694) and AUC (0.851 vs 0.759). The tie comes from Switzerland and Long Beach VA, where local scores well by predicting "sick" for almost everyone: Switzerland's local model gets 0.938 accuracy but 0.50 balanced accuracy and 0.43 AUC. Pooled ranks Switzerland's patients far better (AUC 0.93) but falls below the majority guess on accuracy.
 
 ---
 
@@ -118,6 +180,27 @@ Full table: [`fl-isic/results/summary.md`](fl-isic/results/summary.md)
 
 ---
 
+## Communication cost
+
+Every round, each hospital downloads the model and uploads its update. With float32 weights and no compression:
+
+- **ISIC:** ~4M parameters ≈ 16 MB, so ~32 MB per hospital per round and ~190 MB per round across 6 hospitals.
+- **Heart disease:** 14 parameters, ~450 bytes per round. Even 2440 rounds is about 1 MB, so communication cost doesn't matter there.
+
+| ISIC run | rounds | data sent | balanced accuracy |
+|---|---|---|---|
+| K = 1 | 5820 | ~1.1 TB | 0.485 |
+| K = 20 | 291 | ~56 GB | 0.609 |
+| K = 100 | 59 | ~11 GB | 0.684 |
+| K = 291 | 20 | ~3.8 GB | 0.714 |
+| K = 970 | 6 | ~1.2 GB | 0.682 |
+| 1 round | 1 | ~0.2 GB | 0.350 |
+| FLamby, K = 100 | 9 | ~1.7 GB | 0.534 |
+
+The best setting is not the most expensive one: 20 rounds and ~3.8 GB beats 5820 rounds and over a terabyte. Matching pooled's steps means my K = 100 run sends ~6.5× FLamby's data; my best run sends about twice FLamby's.
+
+---
+
 ## Which hospitals lose out
 
 ![ISIC per-hospital balanced accuracy vs K](fl-isic/results/T_hospitals.png)
@@ -144,6 +227,27 @@ Pooled keeps improving (still rising at epoch 40 on all metrics, all 3 seeds). F
 
 ---
 
+## Compute
+
+All ISIC runs were Slurm jobs on Georgia Tech's ICE cluster. Each job asked for 1 GPU (any model), 8 CPU cores and 32 GB RAM; the CPU model isn't recorded in the logs. Most runs got an NVIDIA H100 80GB. A few got an H200, which ran at about the same speed, or a slice of an RTX PRO 6000 Blackwell (MIG 2g.48gb), which was 8–14 minutes slower per FedAvg run. All completed runs together used about 42 GPU-hours.
+
+Typical time per run (Slurm elapsed, H100):
+
+| run | 20 epochs | 40 epochs |
+|---|---|---|
+| pooled | ~5 min | ~13 min |
+| local (all 6 hospitals) | ~5.5 min | ~12 min |
+| FedAvg K = 1 | ~58 min | – |
+| FedAvg K = 5 | ~1 h 7 min | – |
+| FedAvg K = 20 to 5820 | ~1 h 20 min to 1 h 25 min | – |
+| FedAvg K = 100 | ~1 h 24 min | ~2 h 48 min |
+
+FedAvg takes about 15× as long as pooled. All 6 hospitals train every round, which is 6× pooled's compute, and the rest comes from running 6 data loaders and evaluating more often.
+
+One run (K = 20, seed 1) was assigned a node with no usable GPU, fell back to CPU and timed out after 3 hours. It was rerun on an H100. The results tables use only the rerun.
+
+---
+
 ## Takeaways
 
 - **Communication frequency only matters when hospitals differ.** On heart disease, a single round matches pooled. On ISIC, the number of rounds moves balanced accuracy from 0.35 to 0.71.
@@ -156,6 +260,9 @@ Pooled keeps improving (still rising at epoch 40 on all metrics, all 3 seeds). F
 
 ## Open questions and next steps
 
-- Test the Adam explanation: rerun the ISIC K sweep with each hospital's Adam state kept across rounds, or with SGD.
+- Test the Adam explanation: rerun ISIC K = 1, 5 and 20 with each hospital's Adam state kept across rounds. If it holds, K = 1 should land near pooled and the curve should fall from left to right.
+- Run FedAvg at FLamby's actual budget (K = 100, 9 rounds) on ISIC to see how much the results depend on the bigger budget.
+- Repeat the per-patient error analysis for ISIC.
+- Try a per-hospital decision threshold on heart disease for Switzerland and Long Beach VA.
 - Does pooled keep improving past 40 epochs on ISIC, and does the K sweep need a 40-epoch version?
 - Add differential privacy (DP-SGD via Opacus; the `--dp` hook is in `fl-tabular`) and measure the privacy–accuracy trade-off, then compare correlated vs independent noise.
