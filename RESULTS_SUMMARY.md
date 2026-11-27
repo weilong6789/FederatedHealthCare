@@ -172,7 +172,27 @@ On ISIC FedAvg is below pooled at every K, and the gap depends heavily on how of
 Two things stand out:
 
 - **The curve has a sweet spot at around 20 rounds (K = 291).** Too few rounds (6 or 1) lets each hospital drift toward its own label mix, and a single round collapses to 0.350.
-- **More rounds also hurts, which is the opposite of what FedAvg theory predicts.** K = 1 should behave like pooled SGD with a larger batch, yet it scores 0.485. The likely cause is that every hospital starts a fresh Adam optimizer each round. With a fresh Adam, the first step is close to `lr × sign(gradient)`, so at K = 1 the model only ever takes those first steps and Adam's momentum and scaling never build up. Untested; see [next steps](#open-questions-and-next-steps).
+- **More rounds also hurts, but that comes from resetting Adam, not from FedAvg.** K = 1 should behave like pooled training with a larger batch, yet it scores 0.485. In these runs every hospital starts a fresh Adam optimizer each round. A fresh Adam's first step is close to `lr × sign(gradient)`, so at K = 1 the model only ever takes those first steps. Rerunning with each hospital keeping its Adam state across rounds confirms this (next section).
+
+### Keeping Adam's state across rounds
+
+I reran K = 1, 5 and 20 (3 seeds each) with each hospital keeping its own Adam optimizer for the whole run. Every round it loads the global weights but keeps its moment estimates, which never leave the hospital. Balanced accuracy on all 4650 test images:
+
+| K | rounds | fresh Adam | kept Adam | kept − pooled [95% CI] |
+|---|---|---|---|---|
+| pooled | – | 0.748 | 0.748 | – |
+| 1 | 5820 | 0.485 ± 0.034 | 0.693 ± 0.023 | −0.055 [−0.070, −0.040] |
+| 5 | 1164 | 0.538 ± 0.043 | 0.704 ± 0.022 | −0.044 [−0.060, −0.028] |
+| 20 | 291 | 0.609 ± 0.029 | 0.702 ± 0.013 | −0.047 [−0.063, −0.031] |
+
+![ISIC fresh vs kept Adam](fl-isic/results_keepopt/keepopt_vs_fresh.png)
+
+- **The explanation holds.** Keeping Adam's state lifts K = 1 by 0.21, K = 5 by 0.17 and K = 20 by 0.09. The smaller the K, the more often Adam was being reset, and the bigger the gain.
+- **With Adam kept, K stops mattering from 1 to 20.** All three land at 0.69–0.70, level with fresh-Adam K = 97–291 (0.689–0.714). So the left side of the sweep was an optimizer artifact. The real cost of FedAvg on ISIC is a gap of about 0.05 balanced accuracy that doesn't shrink with more rounds.
+- **The remaining gap is at the same hospitals.** Hospitals 3 and 4 lose 0.10–0.23 balanced accuracy against pooled at every K, as in the fresh-Adam runs. Hospital 5 does better than pooled (0.69–0.75 vs 0.68). Accuracy is tied with pooled (0.764–0.770 vs 0.771), so FedAvg still leans toward the common classes.
+- **More rounds buy nothing here.** Kept-Adam K = 20 sends ~56 GB for 0.702. Fresh-Adam K = 291 sends ~3.8 GB for 0.714.
+
+Full tables: [`fl-isic/results_keepopt/summary.md`](fl-isic/results_keepopt/summary.md)
 
 Accuracy hides most of this: at K = 97–291 FedAvg's accuracy is statistically tied with pooled (0.768–0.780 vs 0.771) while balanced accuracy is 0.03–0.06 lower. At K = 100, FedAvg leans toward class 1 (nevus), the most common class and 84–94% of the images at hospitals 1 and 5. Its class-1 recall is 0.94 against pooled's 0.84, while it loses 6–19 points on melanoma, basal cell carcinoma, actinic keratosis and squamous cell carcinoma.
 
@@ -251,7 +271,7 @@ One run (K = 20, seed 1) was assigned a node with no usable GPU, fell back to CP
 ## Takeaways
 
 - **Communication frequency only matters when hospitals differ.** On heart disease, a single round matches pooled. On ISIC, the number of rounds moves balanced accuracy from 0.35 to 0.71.
-- **On ISIC there is a best K, around 20 rounds**, and both extremes are bad. The high-round side is likely an artifact of resetting Adam every round.
+- **On ISIC, too few rounds hurts, but more rounds don't help past a point.** A single round collapses to 0.35. The drop at small K came from resetting Adam every round: with each hospital keeping its Adam, K = 1, 5 and 20 all reach 0.69–0.70, level with the best fresh-Adam setting (K = 291, 20 rounds). What's left is a gap of about 0.05 to pooled that more rounds don't close.
 - **More training doesn't close the ISIC gap.** FedAvg plateaus while pooled keeps climbing.
 - **Accuracy is misleading on ISIC.** FedAvg looks as good as or better than pooled on accuracy while losing on balanced accuracy, because it favors the majority class.
 - **The overall score hides hospital-level losses.** Hospitals 3 and 4 on ISIC and Long Beach VA on heart disease are worse off under FedAvg even where the overall score holds.
@@ -260,7 +280,8 @@ One run (K = 20, seed 1) was assigned a node with no usable GPU, fell back to CP
 
 ## Open questions and next steps
 
-- Test the Adam explanation: rerun ISIC K = 1, 5 and 20 with each hospital's Adam state kept across rounds. If it holds, K = 1 should land near pooled and the curve should fall from left to right.
+- Run kept Adam at the larger K values (97, 291, 970) to see whether it changes the right side of the curve. At K ≥ 100 each hospital already takes many steps per round, so the reset should matter less there.
+- The remaining ~0.05 gap at hospitals 3 and 4 is the actual cost of the hospitals' different label mixes. Strategies built for that (FedProx, SCAFFOLD, or a server-side optimizer like FedAdam) are the next thing to try against it.
 - Run FedAvg at FLamby's actual budget (K = 100, 9 rounds) on ISIC to see how much the results depend on the bigger budget.
 - Repeat the per-patient error analysis for ISIC.
 - Try a per-hospital decision threshold on heart disease for Switzerland and Long Beach VA.
