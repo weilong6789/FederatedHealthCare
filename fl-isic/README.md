@@ -154,6 +154,14 @@ TS="5 20" bash sweep_T.sh --keep-opt --out results_keepopt
 python summarize.py results_keepopt
 ```
 
+Or all of it in one command, without waiting on the quick check: 9 jobs plus a
+summary job that runs once they all end, so `results_keepopt/summary.md` is
+ready in the morning:
+
+```bash
+bash run_keepopt.sh
+```
+
 ## Budget
 
 One pooled epoch is 291 steps of batch 64, so the default 20 epochs is 5820
