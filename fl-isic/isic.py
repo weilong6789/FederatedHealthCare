@@ -3,6 +3,7 @@
     python isic.py --method pooled --seed 0
     python isic.py --method fedavg --T 100 --seed 0
     python isic.py --method local --seed 0
+    python isic.py --method fedavg --T 1 --keep-opt --out results_keepopt
     python isic.py --method pooled --epochs 1 --max-images 512    # quick smoke test
 
 Six hospitals, 8 skin-lesion classes, about 23k dermoscopy images. Model,
@@ -19,7 +20,11 @@ data only.
 
 Every method uses the same optimizer (--opt, default Adam at FLamby's lr
 5e-4). FedAvg starts a fresh optimizer at each hospital every round, so Adam's
-moment estimates never cross between hospitals.
+moment estimates never cross between hospitals. With --keep-opt each hospital
+instead keeps its own optimizer for the whole run: every round it loads the
+global weights but carries its Adam moments (or SGD momentum) over from its
+previous round. The state still never leaves the hospital, and the run is
+logged with opt "<opt>-keep".
 
 Writes, under results/:
     isic.csv              test scores along the way, per hospital and over all patients
@@ -50,6 +55,9 @@ p.add_argument("--epochs", type=float, default=20, help="pooled-equivalent epoch
 p.add_argument("--T", type=int, default=100, help="FedAvg local steps per round")
 p.add_argument("--opt", choices=["adam", "sgd"], default="adam")
 p.add_argument("--lr", type=float, default=LR)
+p.add_argument("--keep-opt", action="store_true",
+               help="FedAvg: each hospital keeps its optimizer state across rounds "
+                    "instead of starting a fresh one every round")
 p.add_argument("--eval-every", type=float, default=1.0, help="evaluate about this often, in epochs")
 p.add_argument("--workers", type=int, default=int(os.environ.get("SLURM_CPUS_ON_NODE", 4)),
                help="data-loading processes (shared by all hospitals' loaders)")
@@ -60,12 +68,15 @@ p.add_argument("--data-path", default=None,
                     "(default: where download_isic.py recorded it)")
 p.add_argument("--out", default="results")
 args = p.parse_args()
+if args.keep_opt and args.method != "fedavg":
+    p.error("--keep-opt only applies to --method fedavg")
+OPT_LABEL = args.opt + ("-keep" if args.keep_opt else "")
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 OUT = Path(args.out)
 OUT.mkdir(parents=True, exist_ok=True)
 TAG = args.method + (f"_T{args.T}" if args.method == "fedavg" else "")
-print(f"{TAG} seed {args.seed} on {DEVICE}"
+print(f"{TAG} {OPT_LABEL} seed {args.seed} on {DEVICE}"
       + (f" ({torch.cuda.get_device_name()})" if DEVICE.type == "cuda" else ""), flush=True)
 
 random.seed(args.seed)  # FLamby picks its CoarseDropout hole count with `random`
@@ -192,7 +203,7 @@ def log(model, round_, steps, epochs, hospitals=range(NUM_CLIENTS), final=False)
         for r in rows:
             w.writerow({"method": args.method, "T": args.T if args.method == "fedavg" else "",
                         "seed": args.seed, "round": round_, "steps": steps,
-                        "epochs": round(epochs, 3), "lr": args.lr, "opt": args.opt,
+                        "epochs": round(epochs, 3), "lr": args.lr, "opt": OPT_LABEL,
                         "seconds": round(time.time() - T0), **r})
     last = rows[-1]
     print(f"  epoch {epochs:6.2f}  round {round_:4d}  {last['client']:>4}: "
@@ -229,7 +240,14 @@ if args.method == "pooled":
 
 elif args.method == "fedavg":
     model = make_model()
-    local = make_model()
+    if args.keep_opt:
+        # One model and one optimizer per hospital. load_state_dict copies the
+        # global weights into the same parameter tensors, so each optimizer's
+        # state stays attached to them from round to round.
+        locals_ = [make_model() for _ in range(NUM_CLIENTS)]
+        opts = [make_opt(m) for m in locals_]
+    else:
+        local = make_model()
     its = [batches(train_loader(d, args.seed * 1000 + i)) for i, d in enumerate(TRAIN)]
     rounds = -(-TOTAL // args.T)
     weights = [n / sum(SIZES) for n in SIZES]
@@ -238,9 +256,13 @@ elif args.method == "fedavg":
     next_eval = EVAL_EVERY
     for r in range(1, rounds + 1):
         avg = None
-        for it, wgt in zip(its, weights):
+        for i, (it, wgt) in enumerate(zip(its, weights)):
+            if args.keep_opt:
+                local, opt = locals_[i], opts[i]
+            else:
+                opt = None
             local.load_state_dict(model.state_dict())
-            train_steps(local, it, make_opt(local), args.T)
+            train_steps(local, it, opt or make_opt(local), args.T)
             sd = local.state_dict()
             if avg is None:
                 avg = {k: v.float() * wgt for k, v in sd.items()}

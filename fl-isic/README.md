@@ -71,6 +71,7 @@ it. Arguments (see `python isic.py -h`):
 | `--epochs` | 20 | training budget in pooled-equivalent epochs (FLamby's pooled default) |
 | `--T` | 100 | FedAvg local steps per round |
 | `--opt`, `--lr` | adam, 5e-4 | same for every method (FLamby's pooled setting) |
+| `--keep-opt` | off | FedAvg: each hospital keeps its optimizer state across rounds |
 | `--eval-every` | 1 | evaluate about this often, in epochs |
 | `--max-images` | | cap every train/test set, for quick tests |
 
@@ -123,6 +124,35 @@ finished: `results/T_final.png` (score vs T), `T_curves.png` (one panel per T),
 Jobs lock the CSVs while appending, so runs finishing at once don't splice
 lines together. Expect `summarize.py` to take a few minutes per T: the
 bootstrap rescoring is the slow part.
+
+### Keeping Adam's state across rounds
+
+By default every hospital starts a fresh Adam each round, and at K = 1 that
+means FedAvg only ever takes Adam's first step, which is close to
+`lr × sign(gradient)`. `--keep-opt` gives each hospital one optimizer for the
+whole run, so its Adam moments carry over from round to round (they still never
+leave the hospital). Rows are logged with `opt = adam-keep`; write them to
+their own folder so they don't mix with the fresh-Adam rows in `results/`.
+
+Quick check, one K = 1 run (about an hour on an H100):
+
+```bash
+mkdir -p logs && sbatch keepopt_check.sbatch
+```
+
+The log ends with the final balanced accuracy on all test images. Near 0.7 or
+above supports the explanation; near 0.49 rules it out.
+
+If it holds, run K = 1, 5 and 20 with 3 seeds into the same folder. The quick
+check is already seed 0 at K = 1, so K = 1 only needs seeds 1 and 2. Append
+the pooled rows from `results/` so `summarize.py` has its reference:
+
+```bash
+for f in isic.csv isic_predictions.csv; do awk -F, '$1=="pooled"' results/$f >> results_keepopt/$f; done
+TS="1" SEEDS="1 2" bash sweep_T.sh --keep-opt --out results_keepopt
+TS="5 20" bash sweep_T.sh --keep-opt --out results_keepopt
+python summarize.py results_keepopt
+```
 
 ## Budget
 
